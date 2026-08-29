@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import Discover from './Discover'
 
 type Interest = {
   id: string
@@ -16,6 +17,7 @@ function InterestsOnboarding() {
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [completed, setCompleted] = useState(false)
 
   useEffect(() => {
     async function loadInterests() {
@@ -125,6 +127,8 @@ function InterestsOnboarding() {
       setSuccessMessage(
         'Sua trilha de curiosidades começou a tomar forma. ✨',
       )
+
+      setCompleted(true)
     } catch (error) {
       console.error(error)
 
@@ -134,6 +138,10 @@ function InterestsOnboarding() {
     } finally {
       setSaving(false)
     }
+  }
+
+  if (completed) {
+    return <Discover />
   }
 
   return (
