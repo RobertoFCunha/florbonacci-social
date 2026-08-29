@@ -13,7 +13,9 @@ function InterestsOnboarding() {
   const [interests, setInterests] = useState<Interest[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
     async function loadInterests() {
@@ -27,6 +29,8 @@ function InterestsOnboarding() {
         .order('name', { ascending: true })
 
       if (error) {
+        console.error(error)
+
         setErrorMessage(
           'Não foi possível carregar os interesses agora.',
         )
@@ -52,6 +56,12 @@ function InterestsOnboarding() {
   )
 
   function toggleInterest(interestId: string) {
+    if (saving) {
+      return
+    }
+
+    setSuccessMessage('')
+
     setSelectedIds((current) => {
       if (current.includes(interestId)) {
         return current.filter((id) => id !== interestId)
@@ -59,6 +69,71 @@ function InterestsOnboarding() {
 
       return [...current, interestId]
     })
+  }
+
+  async function handleContinue() {
+    if (selectedIds.length === 0 || saving) {
+      return
+    }
+
+    setSaving(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) {
+        throw userError
+      }
+
+      if (!user) {
+        setErrorMessage(
+          'Sua sessão não foi encontrada. Entre novamente para continuar.',
+        )
+        return
+      }
+
+      const { error: deleteError } = await supabase
+        .from('profile_interests')
+        .delete()
+        .eq('profile_id', user.id)
+        .eq('source', 'selected')
+
+      if (deleteError) {
+        throw deleteError
+      }
+
+      const rows = selectedIds.map((interestId) => ({
+        profile_id: user.id,
+        interest_id: interestId,
+        weight: 1,
+        source: 'selected',
+      }))
+
+      const { error: insertError } = await supabase
+        .from('profile_interests')
+        .insert(rows)
+
+      if (insertError) {
+        throw insertError
+      }
+
+      setSuccessMessage(
+        'Sua trilha de curiosidades começou a tomar forma. ✨',
+      )
+    } catch (error) {
+      console.error(error)
+
+      setErrorMessage(
+        'Não foi possível salvar seus interesses. Tente novamente.',
+      )
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -137,6 +212,7 @@ function InterestsOnboarding() {
         {errorMessage && (
           <div
             style={{
+              marginBottom: 20,
               padding: 20,
               borderRadius: 18,
               background: '#fff0ed',
@@ -147,7 +223,22 @@ function InterestsOnboarding() {
           </div>
         )}
 
-        {!loading && !errorMessage && (
+        {successMessage && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: 20,
+              borderRadius: 18,
+              background: '#e7f2e8',
+              color: '#315d3b',
+              fontWeight: 700,
+            }}
+          >
+            {successMessage}
+          </div>
+        )}
+
+        {!loading && (
           <>
             <div
               style={{
@@ -166,6 +257,7 @@ function InterestsOnboarding() {
                   <button
                     key={interest.id}
                     type="button"
+                    disabled={saving}
                     onClick={() =>
                       toggleInterest(interest.id)
                     }
@@ -181,7 +273,10 @@ function InterestsOnboarding() {
                       padding: '18px 16px',
                       minHeight: 96,
                       textAlign: 'left',
-                      cursor: 'pointer',
+                      cursor: saving
+                        ? 'wait'
+                        : 'pointer',
+                      opacity: saving ? 0.72 : 1,
                       boxShadow: isSelected
                         ? '0 10px 24px rgba(49, 93, 59, 0.10)'
                         : 'none',
@@ -265,7 +360,12 @@ function InterestsOnboarding() {
 
               <button
                 type="button"
-                disabled={selectedCount === 0}
+                disabled={
+                  selectedCount === 0 || saving
+                }
+                onClick={() => {
+                  void handleContinue()
+                }}
                 style={{
                   border: 0,
                   borderRadius: 999,
@@ -273,17 +373,18 @@ function InterestsOnboarding() {
                   fontSize: 16,
                   fontWeight: 700,
                   cursor:
-                    selectedCount === 0
+                    selectedCount === 0 || saving
                       ? 'not-allowed'
                       : 'pointer',
                   background:
-                    selectedCount === 0
+                    selectedCount === 0 || saving
                       ? '#c9d1ca'
                       : '#315d3b',
                   color: '#ffffff',
+                  minWidth: 130,
                 }}
               >
-                Continuar
+                {saving ? 'Salvando...' : 'Continuar'}
               </button>
             </div>
           </>
