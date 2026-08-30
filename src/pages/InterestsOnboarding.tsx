@@ -18,35 +18,91 @@ function InterestsOnboarding() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
-    async function loadInterests() {
+    let active = true
+
+    async function loadOnboarding() {
       setLoading(true)
       setErrorMessage('')
 
-      const { data, error } = await supabase
-        .from('interests')
-        .select('id, name, slug, description, parent_id')
-        .eq('status', 'active')
-        .order('name', { ascending: true })
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
 
-      if (error) {
+        if (userError) {
+          throw userError
+        }
+
+        if (!user) {
+          if (active) {
+            navigate('/login', { replace: true })
+          }
+
+          return
+        }
+
+        const [
+          interestsResult,
+          selectedInterestsResult,
+        ] = await Promise.all([
+          supabase
+            .from('interests')
+            .select(
+              'id, name, slug, description, parent_id',
+            )
+            .eq('status', 'active')
+            .order('name', { ascending: true }),
+
+          supabase
+            .from('profile_interests')
+            .select('interest_id')
+            .eq('profile_id', user.id)
+            .eq('source', 'selected'),
+        ])
+
+        if (interestsResult.error) {
+          throw interestsResult.error
+        }
+
+        if (selectedInterestsResult.error) {
+          throw selectedInterestsResult.error
+        }
+
+        if (!active) {
+          return
+        }
+
+        setInterests(interestsResult.data ?? [])
+
+        setSelectedIds(
+          (selectedInterestsResult.data ?? []).map(
+            (item) => item.interest_id,
+          ),
+        )
+      } catch (error) {
         console.error(error)
 
-        setErrorMessage(
-          'Não foi possível carregar os interesses agora.',
-        )
-        setLoading(false)
-        return
+        if (active) {
+          setErrorMessage(
+            'Não foi possível carregar sua trilha de interesses.',
+          )
+        }
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
       }
-
-      setInterests(data ?? [])
-      setLoading(false)
     }
 
-    void loadInterests()
-  }, [])
+    void loadOnboarding()
+
+    return () => {
+      active = false
+    }
+  }, [navigate])
 
   const selectedCount = selectedIds.length
 
@@ -62,8 +118,6 @@ function InterestsOnboarding() {
     if (saving) {
       return
     }
-
-    setSuccessMessage('')
 
     setSelectedIds((current) => {
       if (current.includes(interestId)) {
@@ -81,7 +135,6 @@ function InterestsOnboarding() {
 
     setSaving(true)
     setErrorMessage('')
-    setSuccessMessage('')
 
     try {
       const {
@@ -94,9 +147,7 @@ function InterestsOnboarding() {
       }
 
       if (!user) {
-        setErrorMessage(
-          'Sua sessão não foi encontrada. Entre novamente para continuar.',
-        )
+        navigate('/login', { replace: true })
         return
       }
 
@@ -124,10 +175,6 @@ function InterestsOnboarding() {
       if (insertError) {
         throw insertError
       }
-
-      setSuccessMessage(
-        'Sua trilha de curiosidades começou a tomar forma. ✨',
-      )
 
       navigate('/discover')
     } catch (error) {
@@ -225,21 +272,6 @@ function InterestsOnboarding() {
             }}
           >
             {errorMessage}
-          </div>
-        )}
-
-        {successMessage && (
-          <div
-            style={{
-              marginBottom: 20,
-              padding: 20,
-              borderRadius: 18,
-              background: '#e7f2e8',
-              color: '#315d3b',
-              fontWeight: 700,
-            }}
-          >
-            {successMessage}
           </div>
         )}
 
