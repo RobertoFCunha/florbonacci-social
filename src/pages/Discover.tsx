@@ -8,20 +8,64 @@ type Interest = {
   slug: string
 }
 
+type FeedAuthor = {
+  id: string
+  display_name: string | null
+  username: string | null
+  avatar_path: string | null
+}
+
+type Discovery = {
+  id: string
+  author_id: string
+  title: string | null
+  body: string
+  visibility: string
+  status: string
+  public_city: string | null
+  public_state: string | null
+  public_country: string | null
+  created_at: string
+  published_at: string | null
+  author: FeedAuthor | null
+  interests: Interest[]
+}
+
+type DiscoveryRow = {
+  id: string
+  author_id: string
+  title: string | null
+  body: string
+  visibility: string
+  status: string
+  public_city: string | null
+  public_state: string | null
+  public_country: string | null
+  created_at: string
+  published_at: string | null
+}
+
+type DiscoveryInterestRow = {
+  discovery_id: string
+  interest_id: string
+}
+
 function Discover() {
   const navigate = useNavigate()
 
   const [interests, setInterests] = useState<Interest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [discoveries, setDiscoveries] = useState<Discovery[]>([])
+
+  const [loadingTrail, setLoadingTrail] = useState(true)
+  const [loadingFeed, setLoadingFeed] = useState(true)
+
+  const [trailError, setTrailError] = useState('')
+  const [feedError, setFeedError] = useState('')
 
   useEffect(() => {
     let active = true
 
-    async function loadTrail() {
-      setLoading(true)
-      setErrorMessage('')
-
+    async function loadPage() {
       try {
         const {
           data: { user },
@@ -37,72 +81,329 @@ function Discover() {
           return
         }
 
-        const {
-          data: profileInterests,
-          error: profileInterestsError,
-        } = await supabase
-          .from('profile_interests')
-          .select('interest_id')
-          .eq('profile_id', user.id)
-          .eq('source', 'selected')
-
-        if (profileInterestsError) {
-          throw profileInterestsError
-        }
-
-        const interestIds = (profileInterests ?? []).map(
-          (item) => item.interest_id,
-        )
-
-        if (interestIds.length === 0) {
-          if (active) {
-            setInterests([])
-          }
-
-          return
-        }
-
-        const {
-          data: interestRows,
-          error: interestsError,
-        } = await supabase
-          .from('interests')
-          .select('id, name, slug')
-          .in('id', interestIds)
-          .order('name', { ascending: true })
-
-        if (interestsError) {
-          throw interestsError
-        }
-
-        if (active) {
-          setInterests(interestRows ?? [])
-        }
+        await Promise.all([
+          loadTrail(user.id, active),
+          loadFeed(active),
+        ])
       } catch (error) {
         console.error(error)
 
         if (active) {
-          setErrorMessage(
+          setTrailError(
             'Não foi possível carregar sua trilha agora.',
           )
-        }
-      } finally {
-        if (active) {
-          setLoading(false)
+          setFeedError(
+            'Não foi possível carregar as descobertas agora.',
+          )
+          setLoadingTrail(false)
+          setLoadingFeed(false)
         }
       }
     }
 
-    void loadTrail()
+    void loadPage()
 
     return () => {
       active = false
     }
   }, [navigate])
 
+  async function loadTrail(
+    userId: string,
+    active: boolean,
+  ) {
+    setLoadingTrail(true)
+    setTrailError('')
+
+    try {
+      const {
+        data: profileInterests,
+        error: profileInterestsError,
+      } = await supabase
+        .from('profile_interests')
+        .select('interest_id')
+        .eq('profile_id', userId)
+        .eq('source', 'selected')
+
+      if (profileInterestsError) {
+        throw profileInterestsError
+      }
+
+      const interestIds = (profileInterests ?? []).map(
+        (item) => item.interest_id,
+      )
+
+      if (interestIds.length === 0) {
+        if (active) {
+          setInterests([])
+        }
+
+        return
+      }
+
+      const {
+        data: interestRows,
+        error: interestsError,
+      } = await supabase
+        .from('interests')
+        .select('id, name, slug')
+        .in('id', interestIds)
+        .order('name', { ascending: true })
+
+      if (interestsError) {
+        throw interestsError
+      }
+
+      if (active) {
+        setInterests(interestRows ?? [])
+      }
+    } catch (error) {
+      console.error(error)
+
+      if (active) {
+        setTrailError(
+          'Não foi possível carregar sua trilha agora.',
+        )
+      }
+    } finally {
+      if (active) {
+        setLoadingTrail(false)
+      }
+    }
+  }
+
+  async function loadFeed(active: boolean) {
+    setLoadingFeed(true)
+    setFeedError('')
+
+    try {
+      const {
+        data: discoveryRows,
+        error: discoveriesError,
+      } = await supabase
+        .from('discoveries')
+        .select(`
+          id,
+          author_id,
+          title,
+          body,
+          visibility,
+          status,
+          public_city,
+          public_state,
+          public_country,
+          created_at,
+          published_at
+        `)
+        .eq('visibility', 'public')
+        .eq('status', 'published')
+        .order('published_at', {
+          ascending: false,
+          nullsFirst: false,
+        })
+
+      if (discoveriesError) {
+        throw discoveriesError
+      }
+
+      const rows = (discoveryRows ?? []) as DiscoveryRow[]
+
+      if (rows.length === 0) {
+        if (active) {
+          setDiscoveries([])
+        }
+
+        return
+      }
+
+      const authorIds = Array.from(
+        new Set(rows.map((item) => item.author_id)),
+      )
+
+      const discoveryIds = rows.map(
+        (item) => item.id,
+      )
+
+      const [
+        profilesResult,
+        discoveryInterestsResult,
+      ] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select(`
+            id,
+            display_name,
+            username,
+            avatar_path
+          `)
+          .in('id', authorIds),
+
+        supabase
+          .from('discovery_interests')
+          .select(`
+            discovery_id,
+            interest_id
+          `)
+          .in('discovery_id', discoveryIds),
+      ])
+
+      if (profilesResult.error) {
+        throw profilesResult.error
+      }
+
+      if (discoveryInterestsResult.error) {
+        throw discoveryInterestsResult.error
+      }
+
+      const authors =
+        (profilesResult.data ?? []) as FeedAuthor[]
+
+      const discoveryInterestRows =
+        (discoveryInterestsResult.data ??
+          []) as DiscoveryInterestRow[]
+
+      const feedInterestIds = Array.from(
+        new Set(
+          discoveryInterestRows.map(
+            (item) => item.interest_id,
+          ),
+        ),
+      )
+
+      let feedInterests: Interest[] = []
+
+      if (feedInterestIds.length > 0) {
+        const {
+          data: interestRows,
+          error: interestsError,
+        } = await supabase
+          .from('interests')
+          .select('id, name, slug')
+          .in('id', feedInterestIds)
+
+        if (interestsError) {
+          throw interestsError
+        }
+
+        feedInterests =
+          (interestRows ?? []) as Interest[]
+      }
+
+      const authorById = new Map(
+        authors.map((author) => [
+          author.id,
+          author,
+        ]),
+      )
+
+      const interestById = new Map(
+        feedInterests.map((interest) => [
+          interest.id,
+          interest,
+        ]),
+      )
+
+      const discoveryInterestsByDiscovery =
+        new Map<string, Interest[]>()
+
+      for (const item of discoveryInterestRows) {
+        const interest =
+          interestById.get(item.interest_id)
+
+        if (!interest) {
+          continue
+        }
+
+        const current =
+          discoveryInterestsByDiscovery.get(
+            item.discovery_id,
+          ) ?? []
+
+        current.push(interest)
+
+        discoveryInterestsByDiscovery.set(
+          item.discovery_id,
+          current,
+        )
+      }
+
+      const feed: Discovery[] = rows.map(
+        (row) => ({
+          ...row,
+          author:
+            authorById.get(row.author_id) ?? null,
+          interests:
+            discoveryInterestsByDiscovery.get(
+              row.id,
+            ) ?? [],
+        }),
+      )
+
+      if (active) {
+        setDiscoveries(feed)
+      }
+    } catch (error) {
+      console.error(error)
+
+      if (active) {
+        setFeedError(
+          'Não foi possível carregar as descobertas agora.',
+        )
+      }
+    } finally {
+      if (active) {
+        setLoadingFeed(false)
+      }
+    }
+  }
+
   async function handleSignOut() {
     await supabase.auth.signOut()
     navigate('/login', { replace: true })
+  }
+
+  function formatDate(dateValue: string | null) {
+    if (!dateValue) {
+      return ''
+    }
+
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(dateValue))
+  }
+
+  function getLocation(discovery: Discovery) {
+    return [
+      discovery.public_city,
+      discovery.public_state,
+      discovery.public_country,
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  function getAuthorName(
+    author: FeedAuthor | null,
+  ) {
+    if (!author) {
+      return 'Explorador Florbonacci'
+    }
+
+    return (
+      author.display_name ||
+      author.username ||
+      'Explorador Florbonacci'
+    )
+  }
+
+  function getAuthorInitial(
+    author: FeedAuthor | null,
+  ) {
+    const name = getAuthorName(author)
+
+    return name.trim().charAt(0).toUpperCase() || 'F'
   }
 
   return (
@@ -121,7 +422,8 @@ function Discover() {
           zIndex: 10,
           background: 'rgba(247, 245, 238, 0.92)',
           backdropFilter: 'blur(16px)',
-          borderBottom: '1px solid rgba(49, 93, 59, 0.08)',
+          borderBottom:
+            '1px solid rgba(49, 93, 59, 0.08)',
         }}
       >
         <div
@@ -156,8 +458,25 @@ function Discover() {
               display: 'flex',
               alignItems: 'center',
               gap: 8,
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
             }}
           >
+            <button
+              type="button"
+              onClick={() => navigate('/discover/new')}
+              style={{
+                borderRadius: 999,
+                padding: '10px 16px',
+                background: '#315d3b',
+                color: '#ffffff',
+                fontWeight: 750,
+                cursor: 'pointer',
+              }}
+            >
+              + Nova descoberta
+            </button>
+
             <button
               type="button"
               onClick={() => navigate('/interests')}
@@ -222,7 +541,8 @@ function Discover() {
           <h1
             style={{
               margin: 0,
-              fontSize: 'clamp(2.7rem, 7vw, 5.5rem)',
+              fontSize:
+                'clamp(2.7rem, 7vw, 5.5rem)',
               lineHeight: 0.94,
               letterSpacing: '-0.055em',
               maxWidth: 850,
@@ -243,7 +563,7 @@ function Discover() {
             }}
           >
             Sua trilha nasce daquilo que desperta sua
-            curiosidade. Cada descoberta poderá revelar novas
+            curiosidade. Cada descoberta pode revelar novas
             pessoas, lugares, ideias e caminhos.
           </p>
         </section>
@@ -304,13 +624,15 @@ function Discover() {
             </button>
           </div>
 
-          {loading && (
+          {loadingTrail && (
             <div
               style={{
                 padding: 22,
                 borderRadius: 24,
-                background: 'rgba(255, 255, 255, 0.78)',
-                border: '1px solid rgba(49, 93, 59, 0.08)',
+                background:
+                  'rgba(255, 255, 255, 0.78)',
+                border:
+                  '1px solid rgba(49, 93, 59, 0.08)',
                 color: '#667068',
               }}
             >
@@ -318,7 +640,7 @@ function Discover() {
             </div>
           )}
 
-          {errorMessage && (
+          {trailError && (
             <div
               style={{
                 padding: 22,
@@ -327,12 +649,12 @@ function Discover() {
                 color: '#8b2f23',
               }}
             >
-              {errorMessage}
+              {trailError}
             </div>
           )}
 
-          {!loading &&
-            !errorMessage &&
+          {!loadingTrail &&
+            !trailError &&
             interests.length > 0 && (
               <div
                 style={{
@@ -362,8 +684,8 @@ function Discover() {
               </div>
             )}
 
-          {!loading &&
-            !errorMessage &&
+          {!loadingTrail &&
+            !trailError &&
             interests.length === 0 && (
               <div
                 style={{
@@ -436,101 +758,303 @@ function Discover() {
                 Descobertas
               </h2>
             </div>
+
+            <button
+              type="button"
+              onClick={() => navigate('/discover/new')}
+              style={{
+                padding: 0,
+                background: 'transparent',
+                color: '#315d3b',
+                fontWeight: 750,
+                cursor: 'pointer',
+              }}
+            >
+              Compartilhar uma descoberta →
+            </button>
           </div>
 
-          <article
-            style={{
-              overflow: 'hidden',
-              borderRadius: 32,
-              background: '#1f2a22',
-              color: '#ffffff',
-              minHeight: 360,
-              display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(280px, 1fr))',
-              boxShadow:
-                '0 24px 60px rgba(31, 42, 34, 0.12)',
-            }}
-          >
+          {loadingFeed && (
             <div
               style={{
-                minHeight: 300,
-                background:
-                  'radial-gradient(circle at 30% 20%, rgba(177, 210, 168, 0.42), transparent 34%), radial-gradient(circle at 72% 68%, rgba(98, 143, 106, 0.46), transparent 38%), linear-gradient(145deg, #6e896c 0%, #26392d 100%)',
-                display: 'grid',
-                placeItems: 'center',
-                padding: 32,
+                padding: 26,
+                borderRadius: 28,
+                background: '#ffffff',
+                border:
+                  '1px solid rgba(49, 93, 59, 0.08)',
+                color: '#667068',
               }}
             >
+              Procurando descobertas...
+            </div>
+          )}
+
+          {feedError && (
+            <div
+              style={{
+                padding: 24,
+                borderRadius: 24,
+                background: '#fff0ed',
+                color: '#8b2f23',
+              }}
+            >
+              {feedError}
+            </div>
+          )}
+
+          {!loadingFeed &&
+            !feedError &&
+            discoveries.length === 0 && (
               <div
                 style={{
-                  width: 120,
-                  height: 120,
-                  borderRadius: '50%',
-                  border: '1px solid rgba(255,255,255,0.36)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontSize: 52,
+                  padding:
+                    'clamp(28px, 6vw, 48px)',
+                  borderRadius: 30,
+                  background: '#ffffff',
+                  border:
+                    '1px solid rgba(49, 93, 59, 0.08)',
+                  textAlign: 'center',
                 }}
               >
-                ✦
+                <div
+                  style={{
+                    width: 72,
+                    height: 72,
+                    margin: '0 auto 18px',
+                    borderRadius: 24,
+                    background: '#e5eee6',
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontSize: 30,
+                  }}
+                >
+                  ✦
+                </div>
+
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: 28,
+                    letterSpacing: '-0.03em',
+                  }}
+                >
+                  Ainda não há descobertas por aqui.
+                </h3>
+
+                <p
+                  style={{
+                    margin: '12px auto 22px',
+                    maxWidth: 480,
+                    color: '#667068',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Seja a primeira pessoa a compartilhar algo
+                  que fez você parar e prestar atenção.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/discover/new')
+                  }
+                  style={{
+                    borderRadius: 999,
+                    padding: '13px 20px',
+                    background: '#315d3b',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Criar descoberta
+                </button>
               </div>
-            </div>
+            )}
 
-            <div
-              style={{
-                padding: 'clamp(28px, 5vw, 52px)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-              }}
-            >
-              <span
+          {!loadingFeed &&
+            !feedError &&
+            discoveries.length > 0 && (
+              <div
                 style={{
-                  color: '#b9cbbd',
-                  fontSize: 13,
-                  fontWeight: 800,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
+                  display: 'grid',
+                  gap: 22,
                 }}
               >
-                O próximo passo
-              </span>
+                {discoveries.map((discovery) => {
+                  const authorName =
+                    getAuthorName(discovery.author)
 
-              <h3
-                style={{
-                  margin: '12px 0 0',
-                  maxWidth: 460,
-                  fontSize: 'clamp(2rem, 4vw, 3.4rem)',
-                  lineHeight: 1,
-                  letterSpacing: '-0.045em',
-                }}
-              >
-                Sua curiosidade vai ganhar um feed.
-              </h3>
+                  const location =
+                    getLocation(discovery)
 
-              <p
-                style={{
-                  margin: '18px 0 0',
-                  maxWidth: 480,
-                  color: '#d4ddd6',
-                  fontSize: 17,
-                  lineHeight: 1.6,
-                }}
-              >
-                Aqui entrarão as descobertas publicadas pela
-                comunidade, organizadas pelos assuntos que fazem
-                sentido para você.
-              </p>
-            </div>
-          </article>
+                  return (
+                    <article
+                      key={discovery.id}
+                      style={{
+                        overflow: 'hidden',
+                        borderRadius: 30,
+                        background: '#ffffff',
+                        border:
+                          '1px solid rgba(49, 93, 59, 0.09)',
+                        boxShadow:
+                          '0 18px 48px rgba(49, 93, 59, 0.07)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding:
+                            'clamp(22px, 5vw, 34px)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent:
+                              'space-between',
+                            gap: 16,
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 12,
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: 46,
+                                height: 46,
+                                borderRadius: '50%',
+                                background: '#e4efe6',
+                                color: '#315d3b',
+                                display: 'grid',
+                                placeItems: 'center',
+                                fontWeight: 800,
+                                fontSize: 18,
+                              }}
+                            >
+                              {getAuthorInitial(
+                                discovery.author,
+                              )}
+                            </div>
+
+                            <div>
+                              <strong
+                                style={{
+                                  display: 'block',
+                                  fontSize: 16,
+                                }}
+                              >
+                                {authorName}
+                              </strong>
+
+                              <span
+                                style={{
+                                  display: 'block',
+                                  marginTop: 2,
+                                  color: '#7a847c',
+                                  fontSize: 13,
+                                }}
+                              >
+                                {formatDate(
+                                  discovery.published_at ??
+                                    discovery.created_at,
+                                )}
+                              </span>
+                            </div>
+                          </div>
+
+                          {location && (
+                            <span
+                              style={{
+                                color: '#748078',
+                                fontSize: 13,
+                              }}
+                            >
+                              {location}
+                            </span>
+                          )}
+                        </div>
+
+                        {discovery.title && (
+                          <h3
+                            style={{
+                              margin: '24px 0 0',
+                              fontSize:
+                                'clamp(1.8rem, 4vw, 2.7rem)',
+                              lineHeight: 1.05,
+                              letterSpacing:
+                                '-0.04em',
+                            }}
+                          >
+                            {discovery.title}
+                          </h3>
+                        )}
+
+                        <p
+                          style={{
+                            margin:
+                              discovery.title
+                                ? '14px 0 0'
+                                : '24px 0 0',
+                            maxWidth: 760,
+                            color: '#4f5a52',
+                            fontSize: 17,
+                            lineHeight: 1.7,
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {discovery.body}
+                        </p>
+
+                        {discovery.interests.length > 0 && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: 8,
+                              marginTop: 24,
+                            }}
+                          >
+                            {discovery.interests.map(
+                              (interest) => (
+                                <span
+                                  key={interest.id}
+                                  style={{
+                                    padding:
+                                      '8px 12px',
+                                    borderRadius: 999,
+                                    background:
+                                      '#f1f5f1',
+                                    color: '#4c6854',
+                                    fontSize: 13,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {interest.name}
+                                </span>
+                              ),
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
         </section>
 
         <footer
           style={{
             marginTop: 54,
             paddingTop: 22,
-            borderTop: '1px solid rgba(49, 93, 59, 0.10)',
+            borderTop:
+              '1px solid rgba(49, 93, 59, 0.10)',
             color: '#7a847c',
             fontSize: 14,
           }}
