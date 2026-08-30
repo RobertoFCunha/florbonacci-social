@@ -11,6 +11,8 @@ import InterestsOnboarding from './pages/InterestsOnboarding'
 import Login from './pages/Login'
 import NewDiscovery from './pages/NewDiscovery'
 
+import PublicProfile from './pages/PublicProfile'
+
 function App() {
   return (
     <BrowserRouter>
@@ -53,12 +55,21 @@ function App() {
         />
 
         <Route
-          path="*"
-          element={<Navigate to="/login" replace />}
+          path="/profile/:profileId"
+          element={
+            <ProtectedRoute>
+              <PublicProfile />
+            </ProtectedRoute>
+          }
         />
-      </Routes>
-    </BrowserRouter>
-  )
+
+          <Route
+            path="*"
+            element={<Navigate to="/login" replace />}
+          />
+        </Routes>
+      </BrowserRouter>
+    )
 }
 
 export default App
