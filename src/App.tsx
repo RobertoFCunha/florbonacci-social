@@ -5,6 +5,7 @@ import {
   Routes,
 } from 'react-router-dom'
 
+import ProtectedRoute from './components/ProtectedRoute'
 import Discover from './pages/Discover'
 import InterestsOnboarding from './pages/InterestsOnboarding'
 import Login from './pages/Login'
@@ -25,12 +26,20 @@ function App() {
 
         <Route
           path="/interests"
-          element={<InterestsOnboarding />}
+          element={
+            <ProtectedRoute>
+              <InterestsOnboarding />
+            </ProtectedRoute>
+          }
         />
 
         <Route
           path="/discover"
-          element={<Discover />}
+          element={
+            <ProtectedRoute>
+              <Discover />
+            </ProtectedRoute>
+          }
         />
 
         <Route
