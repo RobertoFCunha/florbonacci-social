@@ -15,6 +15,15 @@ type FeedAuthor = {
   avatar_path: string | null
 }
 
+type DiscoveryMedia = {
+  id: string
+  discovery_id: string
+  media_type: string
+  storage_path: string
+  thumbnail_path: string | null
+  position: number
+}
+
 type Discovery = {
   id: string
   author_id: string
@@ -29,6 +38,8 @@ type Discovery = {
   published_at: string | null
   author: FeedAuthor | null
   interests: Interest[]
+  media: DiscoveryMedia | null
+  mediaUrl: string | null
 }
 
 type DiscoveryRow = {
@@ -92,9 +103,11 @@ function Discover() {
           setTrailError(
             'Não foi possível carregar sua trilha agora.',
           )
+
           setFeedError(
             'Não foi possível carregar as descobertas agora.',
           )
+
           setLoadingTrail(false)
           setLoadingFeed(false)
         }
@@ -217,7 +230,9 @@ function Discover() {
       }
 
       const authorIds = Array.from(
-        new Set(rows.map((item) => item.author_id)),
+        new Set(
+          rows.map((item) => item.author_id),
+        ),
       )
 
       const discoveryIds = rows.map(
@@ -227,6 +242,7 @@ function Discover() {
       const [
         profilesResult,
         discoveryInterestsResult,
+        mediaResult,
       ] = await Promise.all([
         supabase
           .from('profiles')
@@ -245,6 +261,22 @@ function Discover() {
             interest_id
           `)
           .in('discovery_id', discoveryIds),
+
+        supabase
+          .from('discovery_media')
+          .select(`
+            id,
+            discovery_id,
+            media_type,
+            storage_path,
+            thumbnail_path,
+            position
+          `)
+          .in('discovery_id', discoveryIds)
+          .eq('media_type', 'image')
+          .order('position', {
+            ascending: true,
+          }),
       ])
 
       if (profilesResult.error) {
@@ -255,12 +287,20 @@ function Discover() {
         throw discoveryInterestsResult.error
       }
 
+      if (mediaResult.error) {
+        throw mediaResult.error
+      }
+
       const authors =
         (profilesResult.data ?? []) as FeedAuthor[]
 
       const discoveryInterestRows =
         (discoveryInterestsResult.data ??
           []) as DiscoveryInterestRow[]
+
+      const mediaRows =
+        (mediaResult.data ??
+          []) as DiscoveryMedia[]
 
       const feedInterestIds = Array.from(
         new Set(
@@ -327,15 +367,76 @@ function Discover() {
         )
       }
 
+      const mediaByDiscovery =
+        new Map<string, DiscoveryMedia>()
+
+      for (const media of mediaRows) {
+        if (
+          !mediaByDiscovery.has(
+            media.discovery_id,
+          )
+        ) {
+          mediaByDiscovery.set(
+            media.discovery_id,
+            media,
+          )
+        }
+      }
+
+      const mediaUrlByDiscovery =
+        new Map<string, string>()
+
+      await Promise.all(
+        Array.from(mediaByDiscovery.entries()).map(
+          async ([discoveryId, media]) => {
+            const {
+              data,
+              error,
+            } = await supabase.storage
+              .from('discovery-media')
+              .createSignedUrl(
+                media.storage_path,
+                60 * 60,
+              )
+
+            if (error) {
+              console.error(
+                `Não foi possível gerar URL da mídia da descoberta ${discoveryId}.`,
+                error,
+              )
+
+              return
+            }
+
+            if (data?.signedUrl) {
+              mediaUrlByDiscovery.set(
+                discoveryId,
+                data.signedUrl,
+              )
+            }
+          },
+        ),
+      )
+
       const feed: Discovery[] = rows.map(
         (row) => ({
           ...row,
           author:
-            authorById.get(row.author_id) ?? null,
+            authorById.get(
+              row.author_id,
+            ) ?? null,
           interests:
             discoveryInterestsByDiscovery.get(
               row.id,
             ) ?? [],
+          media:
+            mediaByDiscovery.get(
+              row.id,
+            ) ?? null,
+          mediaUrl:
+            mediaUrlByDiscovery.get(
+              row.id,
+            ) ?? null,
         }),
       )
 
@@ -362,7 +463,9 @@ function Discover() {
     navigate('/login', { replace: true })
   }
 
-  function formatDate(dateValue: string | null) {
+  function formatDate(
+    dateValue: string | null,
+  ) {
     if (!dateValue) {
       return ''
     }
@@ -374,7 +477,9 @@ function Discover() {
     }).format(new Date(dateValue))
   }
 
-  function getLocation(discovery: Discovery) {
+  function getLocation(
+    discovery: Discovery,
+  ) {
     return [
       discovery.public_city,
       discovery.public_state,
@@ -401,9 +506,15 @@ function Discover() {
   function getAuthorInitial(
     author: FeedAuthor | null,
   ) {
-    const name = getAuthorName(author)
+    const name =
+      getAuthorName(author)
 
-    return name.trim().charAt(0).toUpperCase() || 'F'
+    return (
+      name
+        .trim()
+        .charAt(0)
+        .toUpperCase() || 'F'
+    )
   }
 
   return (
@@ -420,7 +531,8 @@ function Discover() {
           position: 'sticky',
           top: 0,
           zIndex: 10,
-          background: 'rgba(247, 245, 238, 0.92)',
+          background:
+            'rgba(247, 245, 238, 0.92)',
           backdropFilter: 'blur(16px)',
           borderBottom:
             '1px solid rgba(49, 93, 59, 0.08)',
@@ -439,7 +551,9 @@ function Discover() {
         >
           <button
             type="button"
-            onClick={() => navigate('/discover')}
+            onClick={() =>
+              navigate('/discover')
+            }
             style={{
               padding: 0,
               background: 'transparent',
@@ -464,7 +578,9 @@ function Discover() {
           >
             <button
               type="button"
-              onClick={() => navigate('/discover/new')}
+              onClick={() =>
+                navigate('/discover/new')
+              }
               style={{
                 borderRadius: 999,
                 padding: '10px 16px',
@@ -479,7 +595,9 @@ function Discover() {
 
             <button
               type="button"
-              onClick={() => navigate('/interests')}
+              onClick={() =>
+                navigate('/interests')
+              }
               style={{
                 borderRadius: 999,
                 padding: '10px 15px',
@@ -562,9 +680,11 @@ function Discover() {
               lineHeight: 1.65,
             }}
           >
-            Sua trilha nasce daquilo que desperta sua
-            curiosidade. Cada descoberta pode revelar novas
-            pessoas, lugares, ideias e caminhos.
+            Sua trilha nasce daquilo que
+            desperta sua curiosidade. Cada
+            descoberta pode revelar novas
+            pessoas, lugares, ideias e
+            caminhos.
           </p>
         </section>
 
@@ -577,7 +697,8 @@ function Discover() {
             style={{
               display: 'flex',
               alignItems: 'flex-end',
-              justifyContent: 'space-between',
+              justifyContent:
+                'space-between',
               gap: 18,
               flexWrap: 'wrap',
               marginBottom: 18,
@@ -591,8 +712,10 @@ function Discover() {
                   color: '#748078',
                   fontSize: 13,
                   fontWeight: 750,
-                  letterSpacing: '0.07em',
-                  textTransform: 'uppercase',
+                  letterSpacing:
+                    '0.07em',
+                  textTransform:
+                    'uppercase',
                 }}
               >
                 Sua trilha
@@ -602,7 +725,8 @@ function Discover() {
                 style={{
                   margin: 0,
                   fontSize: 26,
-                  letterSpacing: '-0.03em',
+                  letterSpacing:
+                    '-0.03em',
                 }}
               >
                 O que chama sua atenção
@@ -611,7 +735,9 @@ function Discover() {
 
             <button
               type="button"
-              onClick={() => navigate('/interests')}
+              onClick={() =>
+                navigate('/interests')
+              }
               style={{
                 padding: 0,
                 background: 'transparent',
@@ -663,24 +789,31 @@ function Discover() {
                   gap: 10,
                 }}
               >
-                {interests.map((interest) => (
-                  <div
-                    key={interest.id}
-                    style={{
-                      padding: '11px 16px',
-                      borderRadius: 999,
-                      background: '#ffffff',
-                      border:
-                        '1px solid rgba(49, 93, 59, 0.13)',
-                      boxShadow:
-                        '0 6px 20px rgba(49, 93, 59, 0.05)',
-                      color: '#315d3b',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {interest.name}
-                  </div>
-                ))}
+                {interests.map(
+                  (interest) => (
+                    <div
+                      key={interest.id}
+                      style={{
+                        padding:
+                          '11px 16px',
+                        borderRadius:
+                          999,
+                        background:
+                          '#ffffff',
+                        border:
+                          '1px solid rgba(49, 93, 59, 0.13)',
+                        boxShadow:
+                          '0 6px 20px rgba(49, 93, 59, 0.05)',
+                        color:
+                          '#315d3b',
+                        fontWeight:
+                          700,
+                      }}
+                    >
+                      {interest.name}
+                    </div>
+                  ),
+                )}
               </div>
             )}
 
@@ -703,7 +836,8 @@ function Discover() {
                     fontSize: 18,
                   }}
                 >
-                  Sua trilha ainda está vazia.
+                  Sua trilha ainda está
+                  vazia.
                 </strong>
 
                 <span
@@ -711,8 +845,9 @@ function Discover() {
                     color: '#667068',
                   }}
                 >
-                  Escolha alguns interesses para começar a
-                  personalizar suas descobertas.
+                  Escolha alguns interesses
+                  para começar a personalizar
+                  suas descobertas.
                 </span>
               </div>
             )}
@@ -727,7 +862,8 @@ function Discover() {
             style={{
               display: 'flex',
               alignItems: 'flex-end',
-              justifyContent: 'space-between',
+              justifyContent:
+                'space-between',
               gap: 16,
               flexWrap: 'wrap',
               marginBottom: 20,
@@ -741,8 +877,10 @@ function Discover() {
                   color: '#748078',
                   fontSize: 13,
                   fontWeight: 750,
-                  letterSpacing: '0.07em',
-                  textTransform: 'uppercase',
+                  letterSpacing:
+                    '0.07em',
+                  textTransform:
+                    'uppercase',
                 }}
               >
                 Para você
@@ -752,7 +890,8 @@ function Discover() {
                 style={{
                   margin: 0,
                   fontSize: 30,
-                  letterSpacing: '-0.035em',
+                  letterSpacing:
+                    '-0.035em',
                 }}
               >
                 Descobertas
@@ -761,7 +900,9 @@ function Discover() {
 
             <button
               type="button"
-              onClick={() => navigate('/discover/new')}
+              onClick={() =>
+                navigate('/discover/new')
+              }
               style={{
                 padding: 0,
                 background: 'transparent',
@@ -820,7 +961,8 @@ function Discover() {
                   style={{
                     width: 72,
                     height: 72,
-                    margin: '0 auto 18px',
+                    margin:
+                      '0 auto 18px',
                     borderRadius: 24,
                     background: '#e5eee6',
                     display: 'grid',
@@ -835,33 +977,42 @@ function Discover() {
                   style={{
                     margin: 0,
                     fontSize: 28,
-                    letterSpacing: '-0.03em',
+                    letterSpacing:
+                      '-0.03em',
                   }}
                 >
-                  Ainda não há descobertas por aqui.
+                  Ainda não há descobertas
+                  por aqui.
                 </h3>
 
                 <p
                   style={{
-                    margin: '12px auto 22px',
+                    margin:
+                      '12px auto 22px',
                     maxWidth: 480,
                     color: '#667068',
                     lineHeight: 1.6,
                   }}
                 >
-                  Seja a primeira pessoa a compartilhar algo
-                  que fez você parar e prestar atenção.
+                  Seja a primeira pessoa a
+                  compartilhar algo que fez
+                  você parar e prestar
+                  atenção.
                 </p>
 
                 <button
                   type="button"
                   onClick={() =>
-                    navigate('/discover/new')
+                    navigate(
+                      '/discover/new',
+                    )
                   }
                   style={{
                     borderRadius: 999,
-                    padding: '13px 20px',
-                    background: '#315d3b',
+                    padding:
+                      '13px 20px',
+                    background:
+                      '#315d3b',
                     color: '#ffffff',
                     fontWeight: 800,
                     cursor: 'pointer',
@@ -878,173 +1029,265 @@ function Discover() {
               <div
                 style={{
                   display: 'grid',
-                  gap: 22,
+                  gap: 24,
                 }}
               >
-                {discoveries.map((discovery) => {
-                  const authorName =
-                    getAuthorName(discovery.author)
+                {discoveries.map(
+                  (discovery) => {
+                    const authorName =
+                      getAuthorName(
+                        discovery.author,
+                      )
 
-                  const location =
-                    getLocation(discovery)
+                    const location =
+                      getLocation(
+                        discovery,
+                      )
 
-                  return (
-                    <article
-                      key={discovery.id}
-                      style={{
-                        overflow: 'hidden',
-                        borderRadius: 30,
-                        background: '#ffffff',
-                        border:
-                          '1px solid rgba(49, 93, 59, 0.09)',
-                        boxShadow:
-                          '0 18px 48px rgba(49, 93, 59, 0.07)',
-                      }}
-                    >
-                      <div
+                    return (
+                      <article
+                        key={
+                          discovery.id
+                        }
                         style={{
-                          padding:
-                            'clamp(22px, 5vw, 34px)',
+                          overflow:
+                            'hidden',
+                          borderRadius:
+                            30,
+                          background:
+                            '#ffffff',
+                          border:
+                            '1px solid rgba(49, 93, 59, 0.09)',
+                          boxShadow:
+                            '0 18px 48px rgba(49, 93, 59, 0.07)',
                         }}
                       >
+                        {discovery.mediaUrl && (
+                          <div
+                            style={{
+                              width:
+                                '100%',
+                              aspectRatio:
+                                '16 / 9',
+                              overflow:
+                                'hidden',
+                              background:
+                                '#e5ece6',
+                            }}
+                          >
+                            <img
+                              src={
+                                discovery.mediaUrl
+                              }
+                              alt={
+                                discovery.title
+                                  ? `Fotografia da descoberta ${discovery.title}`
+                                  : 'Fotografia da descoberta'
+                              }
+                              loading="lazy"
+                              style={{
+                                width:
+                                  '100%',
+                                height:
+                                  '100%',
+                                objectFit:
+                                  'cover',
+                              }}
+                            />
+                          </div>
+                        )}
+
                         <div
                           style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent:
-                              'space-between',
-                            gap: 16,
-                            flexWrap: 'wrap',
+                            padding:
+                              'clamp(22px, 5vw, 34px)',
                           }}
                         >
                           <div
                             style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 12,
+                              display:
+                                'flex',
+                              alignItems:
+                                'center',
+                              justifyContent:
+                                'space-between',
+                              gap: 16,
+                              flexWrap:
+                                'wrap',
                             }}
                           >
                             <div
                               style={{
-                                width: 46,
-                                height: 46,
-                                borderRadius: '50%',
-                                background: '#e4efe6',
-                                color: '#315d3b',
-                                display: 'grid',
-                                placeItems: 'center',
-                                fontWeight: 800,
-                                fontSize: 18,
+                                display:
+                                  'flex',
+                                alignItems:
+                                  'center',
+                                gap: 12,
                               }}
                             >
-                              {getAuthorInitial(
-                                discovery.author,
-                              )}
-                            </div>
-
-                            <div>
-                              <strong
+                              <div
                                 style={{
-                                  display: 'block',
-                                  fontSize: 16,
+                                  width: 46,
+                                  height: 46,
+                                  borderRadius:
+                                    '50%',
+                                  background:
+                                    '#e4efe6',
+                                  color:
+                                    '#315d3b',
+                                  display:
+                                    'grid',
+                                  placeItems:
+                                    'center',
+                                  fontWeight:
+                                    800,
+                                  fontSize:
+                                    18,
                                 }}
                               >
-                                {authorName}
-                              </strong>
-
-                              <span
-                                style={{
-                                  display: 'block',
-                                  marginTop: 2,
-                                  color: '#7a847c',
-                                  fontSize: 13,
-                                }}
-                              >
-                                {formatDate(
-                                  discovery.published_at ??
-                                    discovery.created_at,
+                                {getAuthorInitial(
+                                  discovery.author,
                                 )}
-                              </span>
-                            </div>
-                          </div>
+                              </div>
 
-                          {location && (
-                            <span
-                              style={{
-                                color: '#748078',
-                                fontSize: 13,
-                              }}
-                            >
-                              {location}
-                            </span>
-                          )}
-                        </div>
-
-                        {discovery.title && (
-                          <h3
-                            style={{
-                              margin: '24px 0 0',
-                              fontSize:
-                                'clamp(1.8rem, 4vw, 2.7rem)',
-                              lineHeight: 1.05,
-                              letterSpacing:
-                                '-0.04em',
-                            }}
-                          >
-                            {discovery.title}
-                          </h3>
-                        )}
-
-                        <p
-                          style={{
-                            margin:
-                              discovery.title
-                                ? '14px 0 0'
-                                : '24px 0 0',
-                            maxWidth: 760,
-                            color: '#4f5a52',
-                            fontSize: 17,
-                            lineHeight: 1.7,
-                            whiteSpace: 'pre-wrap',
-                          }}
-                        >
-                          {discovery.body}
-                        </p>
-
-                        {discovery.interests.length > 0 && (
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexWrap: 'wrap',
-                              gap: 8,
-                              marginTop: 24,
-                            }}
-                          >
-                            {discovery.interests.map(
-                              (interest) => (
-                                <span
-                                  key={interest.id}
+                              <div>
+                                <strong
                                   style={{
-                                    padding:
-                                      '8px 12px',
-                                    borderRadius: 999,
-                                    background:
-                                      '#f1f5f1',
-                                    color: '#4c6854',
-                                    fontSize: 13,
-                                    fontWeight: 700,
+                                    display:
+                                      'block',
+                                    fontSize:
+                                      16,
                                   }}
                                 >
-                                  {interest.name}
+                                  {
+                                    authorName
+                                  }
+                                </strong>
+
+                                <span
+                                  style={{
+                                    display:
+                                      'block',
+                                    marginTop:
+                                      2,
+                                    color:
+                                      '#7a847c',
+                                    fontSize:
+                                      13,
+                                  }}
+                                >
+                                  {formatDate(
+                                    discovery.published_at ??
+                                      discovery.created_at,
+                                  )}
                                 </span>
-                              ),
+                              </div>
+                            </div>
+
+                            {location && (
+                              <span
+                                style={{
+                                  color:
+                                    '#748078',
+                                  fontSize:
+                                    13,
+                                }}
+                              >
+                                {location}
+                              </span>
                             )}
                           </div>
-                        )}
-                      </div>
-                    </article>
-                  )
-                })}
+
+                          {discovery.title && (
+                            <h3
+                              style={{
+                                margin:
+                                  '24px 0 0',
+                                fontSize:
+                                  'clamp(1.8rem, 4vw, 2.7rem)',
+                                lineHeight:
+                                  1.05,
+                                letterSpacing:
+                                  '-0.04em',
+                              }}
+                            >
+                              {
+                                discovery.title
+                              }
+                            </h3>
+                          )}
+
+                          <p
+                            style={{
+                              margin:
+                                discovery.title
+                                  ? '14px 0 0'
+                                  : '24px 0 0',
+                              maxWidth:
+                                760,
+                              color:
+                                '#4f5a52',
+                              fontSize:
+                                17,
+                              lineHeight:
+                                1.7,
+                              whiteSpace:
+                                'pre-wrap',
+                            }}
+                          >
+                            {discovery.body}
+                          </p>
+
+                          {discovery
+                            .interests
+                            .length > 0 && (
+                            <div
+                              style={{
+                                display:
+                                  'flex',
+                                flexWrap:
+                                  'wrap',
+                                gap: 8,
+                                marginTop:
+                                  24,
+                              }}
+                            >
+                              {discovery.interests.map(
+                                (
+                                  interest,
+                                ) => (
+                                  <span
+                                    key={
+                                      interest.id
+                                    }
+                                    style={{
+                                      padding:
+                                        '8px 12px',
+                                      borderRadius:
+                                        999,
+                                      background:
+                                        '#f1f5f1',
+                                      color:
+                                        '#4c6854',
+                                      fontSize:
+                                        13,
+                                      fontWeight:
+                                        700,
+                                    }}
+                                  >
+                                    {
+                                      interest.name
+                                    }
+                                  </span>
+                                ),
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    )
+                  },
+                )}
               </div>
             )}
         </section>
