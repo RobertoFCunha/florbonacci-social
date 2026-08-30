@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import Discover from './Discover'
 
 type Interest = {
   id: string
@@ -11,13 +11,14 @@ type Interest = {
 }
 
 function InterestsOnboarding() {
+  const navigate = useNavigate()
+
   const [interests, setInterests] = useState<Interest[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const [completed, setCompleted] = useState(false)
 
   useEffect(() => {
     async function loadInterests() {
@@ -128,7 +129,7 @@ function InterestsOnboarding() {
         'Sua trilha de curiosidades começou a tomar forma. ✨',
       )
 
-      setCompleted(true)
+      navigate('/discover')
     } catch (error) {
       console.error(error)
 
@@ -138,10 +139,6 @@ function InterestsOnboarding() {
     } finally {
       setSaving(false)
     }
-  }
-
-  if (completed) {
-    return <Discover />
   }
 
   return (
