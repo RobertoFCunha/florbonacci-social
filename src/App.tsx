@@ -9,6 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Discover from './pages/Discover'
 import InterestsOnboarding from './pages/InterestsOnboarding'
 import Login from './pages/Login'
+import NewDiscovery from './pages/NewDiscovery'
 
 function App() {
   return (
@@ -38,6 +39,15 @@ function App() {
           element={
             <ProtectedRoute>
               <Discover />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/discover/new"
+          element={
+            <ProtectedRoute>
+              <NewDiscovery />
             </ProtectedRoute>
           }
         />
