@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -31,6 +37,21 @@ type Reaction = {
   reaction_type: string
 }
 
+type CommentRow = {
+  id: string
+  discovery_id: string
+  author_id: string
+  parent_comment_id: string | null
+  body: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+type CommentView = CommentRow & {
+  authorName: string
+}
+
 type DiscoveryRow = {
   id: string
   author_id: string
@@ -48,6 +69,7 @@ type Discovery = DiscoveryRow & {
   imageUrl: string | null
   reactionCount: number
   reactedByMe: boolean
+  comments: CommentView[]
 }
 
 const pageStyle: React.CSSProperties = {
@@ -112,6 +134,15 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+function formatCommentDate(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
 export default function Discover() {
   const navigate = useNavigate()
 
@@ -124,6 +155,12 @@ export default function Discover() {
   const [selectedInterestNames, setSelectedInterestNames] =
     useState<string[]>([])
   const [reactionLoading, setReactionLoading] = useState<
+    Record<string, boolean>
+  >({})
+  const [commentDrafts, setCommentDrafts] = useState<
+    Record<string, string>
+  >({})
+  const [commentLoading, setCommentLoading] = useState<
     Record<string, boolean>
   >({})
 
@@ -219,7 +256,6 @@ export default function Discover() {
 
       if (rows.length === 0) {
         setDiscoveries([])
-        setLoading(false)
         return
       }
 
@@ -229,17 +265,12 @@ export default function Discover() {
       ]
 
       const [
-        profilesResult,
         discoveryInterestsResult,
         interestsResult,
         mediaResult,
         reactionsResult,
+        commentsResult,
       ] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, username, display_name')
-          .in('id', authorIds),
-
         supabase
           .from('discovery_interests')
           .select('discovery_id, interest_id')
@@ -262,11 +293,26 @@ export default function Discover() {
           )
           .in('discovery_id', discoveryIds)
           .eq('reaction_type', 'enchanted'),
-      ])
 
-      if (profilesResult.error) {
-        throw profilesResult.error
-      }
+        supabase
+          .from('comments')
+          .select(
+            `
+              id,
+              discovery_id,
+              author_id,
+              parent_comment_id,
+              body,
+              status,
+              created_at,
+              updated_at
+            `,
+          )
+          .in('discovery_id', discoveryIds)
+          .eq('status', 'active')
+          .is('parent_comment_id', null)
+          .order('created_at', { ascending: true }),
+      ])
 
       if (discoveryInterestsResult.error) {
         throw discoveryInterestsResult.error
@@ -284,13 +330,45 @@ export default function Discover() {
         throw reactionsResult.error
       }
 
-      const profiles = (profilesResult.data ?? []) as Profile[]
+      if (commentsResult.error) {
+        throw commentsResult.error
+      }
+
       const discoveryInterests = (
         discoveryInterestsResult.data ?? []
       ) as DiscoveryInterest[]
       const interests = (interestsResult.data ?? []) as Interest[]
       const media = (mediaResult.data ?? []) as DiscoveryMedia[]
       const reactions = (reactionsResult.data ?? []) as Reaction[]
+      const comments = (commentsResult.data ?? []) as CommentRow[]
+
+      const commentAuthorIds = [
+        ...new Set(comments.map((comment) => comment.author_id)),
+      ]
+
+      const allProfileIds = [
+        ...new Set([...authorIds, ...commentAuthorIds]),
+      ]
+
+      const {
+        data: profilesData,
+        error: profilesError,
+      } =
+        allProfileIds.length > 0
+          ? await supabase
+              .from('profiles')
+              .select('id, username, display_name')
+              .in('id', allProfileIds)
+          : {
+              data: [] as Profile[],
+              error: null,
+            }
+
+      if (profilesError) {
+        throw profilesError
+      }
+
+      const profiles = (profilesData ?? []) as Profile[]
 
       const profileMap = new Map(
         profiles.map((profile) => [profile.id, profile]),
@@ -350,6 +428,7 @@ export default function Discover() {
                 'Erro ao gerar URL assinada:',
                 error,
               )
+
               signedUrlByDiscovery.set(discoveryId, null)
               return
             }
@@ -370,6 +449,30 @@ export default function Discover() {
 
         list.push(reaction)
         reactionsByDiscovery.set(reaction.discovery_id, list)
+      }
+
+      const commentsByDiscovery = new Map<
+        string,
+        CommentView[]
+      >()
+
+      for (const comment of comments) {
+        const profile = profileMap.get(comment.author_id)
+
+        const authorName =
+          profile?.display_name?.trim() ||
+          profile?.username?.trim() ||
+          'Explorador Florbonacci'
+
+        const list =
+          commentsByDiscovery.get(comment.discovery_id) ?? []
+
+        list.push({
+          ...comment,
+          authorName,
+        })
+
+        commentsByDiscovery.set(comment.discovery_id, list)
       }
 
       const formatted: Discovery[] = rows.map((row) => {
@@ -398,6 +501,8 @@ export default function Discover() {
             (reaction) =>
               reaction.profile_id === user.id,
           ),
+          comments:
+            commentsByDiscovery.get(row.id) ?? [],
         }
       })
 
@@ -498,6 +603,125 @@ export default function Discover() {
       setReactionLoading((current) => ({
         ...current,
         [discovery.id]: false,
+      }))
+    }
+  }
+
+  const submitComment = async (
+    event: FormEvent<HTMLFormElement>,
+    discoveryId: string,
+  ) => {
+    event.preventDefault()
+
+    if (!currentUserId) {
+      return
+    }
+
+    if (commentLoading[discoveryId]) {
+      return
+    }
+
+    const body = (
+      commentDrafts[discoveryId] ?? ''
+    ).trim()
+
+    if (!body) {
+      return
+    }
+
+    setCommentLoading((current) => ({
+      ...current,
+      [discoveryId]: true,
+    }))
+
+    setErrorMessage('')
+
+    try {
+      const {
+        data: insertedComment,
+        error: insertError,
+      } = await supabase
+        .from('comments')
+        .insert({
+          discovery_id: discoveryId,
+          author_id: currentUserId,
+          parent_comment_id: null,
+          body,
+          status: 'active',
+        })
+        .select(
+          `
+            id,
+            discovery_id,
+            author_id,
+            parent_comment_id,
+            body,
+            status,
+            created_at,
+            updated_at
+          `,
+        )
+        .single()
+
+      if (insertError) {
+        throw insertError
+      }
+
+      const {
+        data: authorProfile,
+        error: authorProfileError,
+      } = await supabase
+        .from('profiles')
+        .select('id, username, display_name')
+        .eq('id', currentUserId)
+        .single()
+
+      if (authorProfileError) {
+        throw authorProfileError
+      }
+
+      const profile = authorProfile as Profile
+
+      const authorName =
+        profile.display_name?.trim() ||
+        profile.username?.trim() ||
+        'Explorador Florbonacci'
+
+      const newComment: CommentView = {
+        ...(insertedComment as CommentRow),
+        authorName,
+      }
+
+      setDiscoveries((current) =>
+        current.map((discovery) =>
+          discovery.id === discoveryId
+            ? {
+                ...discovery,
+                comments: [
+                  ...discovery.comments,
+                  newComment,
+                ],
+              }
+            : discovery,
+        ),
+      )
+
+      setCommentDrafts((current) => ({
+        ...current,
+        [discoveryId]: '',
+      }))
+    } catch (error) {
+      console.error(error)
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível publicar o comentário.',
+      )
+    } finally {
+      setCommentLoading((current) => ({
+        ...current,
+        [discoveryId]: false,
       }))
     }
   }
@@ -753,6 +977,7 @@ export default function Discover() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
+                    flexWrap: 'wrap',
                   }}
                 >
                   <button
@@ -803,6 +1028,207 @@ export default function Discover() {
                         : `${discovery.reactionCount} pessoas se encantaram`}
                   </span>
                 </div>
+
+                <section
+                  style={{
+                    marginTop: 18,
+                    paddingTop: 18,
+                    borderTop:
+                      '1px solid rgba(48, 76, 60, 0.09)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 12,
+                      marginBottom:
+                        discovery.comments.length > 0
+                          ? 14
+                          : 10,
+                    }}
+                  >
+                    <strong
+                      style={{
+                        color: '#365541',
+                        fontSize: 14,
+                      }}
+                    >
+                      Comentários
+                    </strong>
+
+                    <span
+                      style={{
+                        color: '#919991',
+                        fontSize: 12,
+                      }}
+                    >
+                      {discovery.comments.length === 0
+                        ? 'Nenhum ainda'
+                        : discovery.comments.length === 1
+                          ? '1 comentário'
+                          : `${discovery.comments.length} comentários`}
+                    </span>
+                  </div>
+
+                  {discovery.comments.length > 0 && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 12,
+                        marginBottom: 16,
+                      }}
+                    >
+                      {discovery.comments.map((comment) => (
+                        <div
+                          key={comment.id}
+                          style={{
+                            padding: '11px 13px',
+                            borderRadius: 14,
+                            background: '#f6f8f5',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent:
+                                'space-between',
+                              gap: 10,
+                              marginBottom: 5,
+                            }}
+                          >
+                            <strong
+                              style={{
+                                fontSize: 13,
+                                color: '#355542',
+                              }}
+                            >
+                              {comment.authorName}
+                            </strong>
+
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: '#969e98',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {formatCommentDate(
+                                comment.created_at,
+                              )}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: 14,
+                              lineHeight: 1.5,
+                              color: '#56635a',
+                              whiteSpace: 'pre-wrap',
+                            }}
+                          >
+                            {comment.body}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <form
+                    onSubmit={(event) =>
+                      void submitComment(
+                        event,
+                        discovery.id,
+                      )
+                    }
+                    style={{
+                      display: 'flex',
+                      gap: 9,
+                      alignItems: 'flex-end',
+                    }}
+                  >
+                    <textarea
+                      value={
+                        commentDrafts[discovery.id] ?? ''
+                      }
+                      onChange={(event) =>
+                        setCommentDrafts((current) => ({
+                          ...current,
+                          [discovery.id]:
+                            event.target.value,
+                        }))
+                      }
+                      maxLength={5000}
+                      rows={2}
+                      placeholder="Escreva um comentário..."
+                      style={{
+                        flex: 1,
+                        resize: 'vertical',
+                        minHeight: 42,
+                        maxHeight: 140,
+                        border:
+                          '1px solid rgba(48, 76, 60, 0.16)',
+                        borderRadius: 14,
+                        padding: '10px 12px',
+                        fontFamily: 'inherit',
+                        fontSize: 14,
+                        lineHeight: 1.4,
+                        color: '#35463b',
+                        background: '#fff',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={
+                        commentLoading[discovery.id] ||
+                        !(
+                          commentDrafts[
+                            discovery.id
+                          ] ?? ''
+                        ).trim()
+                      }
+                      style={{
+                        border: 0,
+                        borderRadius: 999,
+                        padding: '10px 14px',
+                        background: '#315f49',
+                        color: '#fff',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor:
+                          commentLoading[
+                            discovery.id
+                          ] ||
+                          !(
+                            commentDrafts[
+                              discovery.id
+                            ] ?? ''
+                          ).trim()
+                            ? 'default'
+                            : 'pointer',
+                        opacity:
+                          commentLoading[
+                            discovery.id
+                          ] ||
+                          !(
+                            commentDrafts[
+                              discovery.id
+                            ] ?? ''
+                          ).trim()
+                            ? 0.55
+                            : 1,
+                      }}
+                    >
+                      {commentLoading[discovery.id]
+                        ? 'Enviando...'
+                        : 'Comentar'}
+                    </button>
+                  </form>
+                </section>
               </div>
             </article>
           ))
