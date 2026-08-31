@@ -921,14 +921,25 @@ function PublicProfile() {
                   styles.statLabel
                 }
               >
-                {discoveriesCount ===
-                1
+                {discoveriesCount === 1
                   ? 'descoberta'
                   : 'descobertas'}
               </span>
             </div>
 
-            <div style={styles.stat}>
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  `/profile/${profileId}/connections?type=followers`,
+                )
+              }
+              style={{
+                ...styles.stat,
+                ...styles.statButton,
+              }}
+              aria-label="Ver seguidores"
+            >
               <strong
                 style={
                   styles.statNumber
@@ -946,9 +957,21 @@ function PublicProfile() {
                   ? 'seguidor'
                   : 'seguidores'}
               </span>
-            </div>
+            </button>
 
-            <div style={styles.stat}>
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  `/profile/${profileId}/connections?type=following`,
+                )
+              }
+              style={{
+                ...styles.stat,
+                ...styles.statButton,
+              }}
+              aria-label="Ver pessoas seguidas"
+            >
               <strong
                 style={
                   styles.statNumber
@@ -964,7 +987,7 @@ function PublicProfile() {
               >
                 seguindo
               </span>
-            </div>
+            </button>
           </div>
 
           <div
@@ -1331,6 +1354,18 @@ const styles: Record<
     alignItems: 'center',
     gap: 3,
     textAlign: 'center',
+  },
+
+  statButton: {
+    appearance: 'none',
+    border: 0,
+    background: 'transparent',
+    margin: 0,
+    padding: '6px 4px',
+    fontFamily: 'inherit',
+    color: 'inherit',
+    cursor: 'pointer',
+    borderRadius: 12,
   },
 
   statNumber: {

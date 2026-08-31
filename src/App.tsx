@@ -10,7 +10,7 @@ import Discover from './pages/Discover'
 import InterestsOnboarding from './pages/InterestsOnboarding'
 import Login from './pages/Login'
 import NewDiscovery from './pages/NewDiscovery'
-
+import ProfileConnections from './pages/ProfileConnections'
 import PublicProfile from './pages/PublicProfile'
 
 function App() {
@@ -19,7 +19,12 @@ function App() {
       <Routes>
         <Route
           path="/"
-          element={<Navigate to="/login" replace />}
+          element={
+            <Navigate
+              to="/login"
+              replace
+            />
+          }
         />
 
         <Route
@@ -63,13 +68,27 @@ function App() {
           }
         />
 
-          <Route
-            path="*"
-            element={<Navigate to="/login" replace />}
-          />
-        </Routes>
-      </BrowserRouter>
-    )
+        <Route
+          path="/profile/:profileId/connections"
+          element={
+            <ProtectedRoute>
+              <ProfileConnections />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/login"
+              replace
+            />
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  )
 }
 
 export default App
