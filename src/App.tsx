@@ -7,11 +7,14 @@ import {
 
 import ProtectedRoute from './components/ProtectedRoute'
 import Discover from './pages/Discover'
+import EditProfile from './pages/EditProfile'
 import InterestsOnboarding from './pages/InterestsOnboarding'
 import Login from './pages/Login'
 import NewDiscovery from './pages/NewDiscovery'
 import ProfileConnections from './pages/ProfileConnections'
 import PublicProfile from './pages/PublicProfile'
+
+import Explore from './pages/Explore'
 
 function App() {
   return (
@@ -51,10 +54,28 @@ function App() {
         />
 
         <Route
+          path="/explore"
+          element={
+            <ProtectedRoute>
+              <Explore />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/discover/new"
           element={
             <ProtectedRoute>
               <NewDiscovery />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/profile/edit"
+          element={
+            <ProtectedRoute>
+              <EditProfile />
             </ProtectedRoute>
           }
         />

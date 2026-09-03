@@ -8,6 +8,8 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
+import MainNavigation from '../components/MainNavigation'
+
 type Profile = {
   id: string
   username: string | null
@@ -105,6 +107,18 @@ const primaryButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
   whiteSpace: 'nowrap',
 }
+
+  const secondaryButtonStyle: React.CSSProperties = {
+    border: '1px solid rgba(47, 107, 79, 0.18)',
+    borderRadius: 999,
+    background: '#eef4ef',
+    color: '#315f49',
+    padding: '11px 16px',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  }
 
 const cardStyle: React.CSSProperties = {
   overflow: 'hidden',
@@ -1036,19 +1050,48 @@ export default function Discover() {
             </h1>
           </div>
 
-          <button
-            type="button"
-            style={
-              primaryButtonStyle
-            }
-            onClick={() =>
-              navigate(
-                '/discover/new',
-              )
-            }
-          >
-            + Nova descoberta
-          </button>
+          <div
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 9,
+    flexWrap: 'wrap',
+  }}
+>
+  <button
+    type="button"
+    style={
+      secondaryButtonStyle
+    }
+    disabled={!currentUserId}
+    onClick={() => {
+      if (!currentUserId) {
+        return
+      }
+
+      navigate(
+        `/profile/${currentUserId}`,
+      )
+    }}
+  >
+    Eu · Meu perfil
+  </button>
+
+    <button
+      type="button"
+      style={
+        primaryButtonStyle
+      }
+      onClick={() =>
+        navigate(
+          '/discover/new',
+        )
+      }
+    >
+      + Nova descoberta
+    </button>
+</div>
         </header>
 
         <p
@@ -1703,6 +1746,10 @@ export default function Discover() {
           Conexão transforma.
         </footer>
       </div>
+
+      <MainNavigation
+        currentUserId={currentUserId}
+      />
     </main>
   )
 }

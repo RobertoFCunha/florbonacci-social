@@ -10,6 +10,8 @@ import {
 } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
+import MainNavigation from '../components/MainNavigation'
+
 type Profile = {
   id: string
   username: string | null
@@ -1225,6 +1227,10 @@ function PublicProfile() {
           )}
         </section>
       </div>
+
+      <MainNavigation
+        currentUserId={currentUserId}
+      />
     </main>
   )
 }
