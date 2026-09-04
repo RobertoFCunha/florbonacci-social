@@ -9,6 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 import Activity from './pages/Activity'
 import Discover from './pages/Discover'
+import DiscoveryDetails from './pages/DiscoveryDetails'
 import EditProfile from './pages/EditProfile'
 import Explore from './pages/Explore'
 import ForgotPassword from './pages/ForgotPassword'
@@ -67,6 +68,24 @@ function App() {
         />
 
         <Route
+          path="/discover/new"
+          element={
+            <ProtectedRoute>
+              <NewDiscovery />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/discover/:discoveryId"
+          element={
+            <ProtectedRoute>
+              <DiscoveryDetails />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/explore"
           element={
             <ProtectedRoute>
@@ -80,15 +99,6 @@ function App() {
           element={
             <ProtectedRoute>
               <Activity />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/discover/new"
-          element={
-            <ProtectedRoute>
-              <NewDiscovery />
             </ProtectedRoute>
           }
         />

@@ -315,13 +315,21 @@ export default function Activity() {
   ) {
     try {
       if (!item.read_at) {
-        await supabase
+        const now =
+          new Date().toISOString()
+
+        const {
+          error: readError,
+        } = await supabase
           .from('notifications')
           .update({
-            read_at:
-              new Date().toISOString(),
+            read_at: now,
           })
           .eq('id', item.id)
+
+        if (readError) {
+          throw readError
+        }
 
         setItems((current) =>
           current.map(
@@ -329,8 +337,7 @@ export default function Activity() {
               notification.id === item.id
                 ? {
                     ...notification,
-                    read_at:
-                      new Date().toISOString(),
+                    read_at: now,
                   }
                 : notification,
           ),
@@ -349,7 +356,9 @@ export default function Activity() {
       }
 
       if (item.discovery_id) {
-        navigate('/discover')
+        navigate(
+          `/discover/${item.discovery_id}`,
+        )
         return
       }
 
@@ -359,7 +368,14 @@ export default function Activity() {
         )
       }
     } catch (error) {
-      console.error(error)
+      console.error(
+        'Erro ao abrir atividade:',
+        error,
+      )
+
+      setErrorMessage(
+        'Não foi possível abrir esta atividade.',
+      )
     }
   }
 
