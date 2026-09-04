@@ -34,8 +34,9 @@ export default function MainNavigation({
       action: 'new',
     },
     {
-      label: 'Atividade',
-      icon: '♡',
+    label: 'Atividade',
+    icon: '♡',
+    path: '/activity',
     },
     {
       label: 'Eu',

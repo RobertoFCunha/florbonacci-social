@@ -180,6 +180,7 @@ function Login() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '32px 20px',
+        boxSizing: 'border-box',
         color: '#1f2a22',
       }}
     >
@@ -190,6 +191,7 @@ function Login() {
           background: '#ffffff',
           borderRadius: 28,
           padding: '34px 30px',
+          boxSizing: 'border-box',
           boxShadow:
             '0 24px 60px rgba(31, 42, 34, 0.10)',
         }}
@@ -362,8 +364,7 @@ function Login() {
             >
               <span
                 style={{
-                  display:
-                    'block',
+                  display: 'block',
                   marginBottom: 8,
                   fontSize: 14,
                   fontWeight: 700,
@@ -376,12 +377,9 @@ function Login() {
               <input
                 type="text"
                 value={displayName}
-                onChange={(
-                  event,
-                ) =>
+                onChange={(event) =>
                   setDisplayName(
-                    event.target
-                      .value,
+                    event.target.value,
                   )
                 }
                 autoComplete="name"
@@ -456,7 +454,7 @@ function Login() {
               marginBottom:
                 isSignup
                   ? 16
-                  : 22,
+                  : 8,
             }}
           >
             <span
@@ -510,6 +508,39 @@ function Login() {
             />
           </label>
 
+          {!isSignup && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent:
+                  'flex-end',
+                marginBottom: 22,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    '/forgot-password',
+                  )
+                }
+                style={{
+                  appearance: 'none',
+                  border: 0,
+                  background:
+                    'transparent',
+                  padding: '5px 0',
+                  color: '#315d3b',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Esqueci minha senha
+              </button>
+            </div>
+          )}
+
           {isSignup && (
             <label
               style={{
@@ -534,12 +565,9 @@ function Login() {
                 value={
                   confirmPassword
                 }
-                onChange={(
-                  event,
-                ) =>
+                onChange={(event) =>
                   setConfirmPassword(
-                    event.target
-                      .value,
+                    event.target.value,
                   )
                 }
                 autoComplete="new-password"
@@ -595,8 +623,7 @@ function Login() {
 
         <p
           style={{
-            margin:
-              '22px 0 0',
+            margin: '22px 0 0',
             textAlign: 'center',
             color: '#7a847d',
             fontSize: 13,

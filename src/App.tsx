@@ -6,15 +6,18 @@ import {
 } from 'react-router-dom'
 
 import ProtectedRoute from './components/ProtectedRoute'
+
+import Activity from './pages/Activity'
 import Discover from './pages/Discover'
 import EditProfile from './pages/EditProfile'
+import Explore from './pages/Explore'
+import ForgotPassword from './pages/ForgotPassword'
 import InterestsOnboarding from './pages/InterestsOnboarding'
 import Login from './pages/Login'
 import NewDiscovery from './pages/NewDiscovery'
 import ProfileConnections from './pages/ProfileConnections'
 import PublicProfile from './pages/PublicProfile'
-
-import Explore from './pages/Explore'
+import ResetPassword from './pages/ResetPassword'
 
 function App() {
   return (
@@ -33,6 +36,16 @@ function App() {
         <Route
           path="/login"
           element={<Login />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPassword />}
+        />
+
+        <Route
+          path="/reset-password"
+          element={<ResetPassword />}
         />
 
         <Route
@@ -58,6 +71,15 @@ function App() {
           element={
             <ProtectedRoute>
               <Explore />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/activity"
+          element={
+            <ProtectedRoute>
+              <Activity />
             </ProtectedRoute>
           }
         />
