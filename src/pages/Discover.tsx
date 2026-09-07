@@ -6,9 +6,9 @@ import {
 } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
 
 import MainNavigation from '../components/MainNavigation'
+import { supabase } from '../lib/supabaseClient'
 
 type Profile = {
   id: string
@@ -72,6 +72,11 @@ type Discovery = DiscoveryRow & {
   reactionCount: number
   reactedByMe: boolean
   comments: CommentView[]
+
+  sharedInterestCount: number
+  fromFollowedProfile: boolean
+  feedScore: number
+  feedReason: string
 }
 
 const pageStyle: React.CSSProperties = {
@@ -84,7 +89,7 @@ const pageStyle: React.CSSProperties = {
 const contentStyle: React.CSSProperties = {
   width: 'min(100%, 760px)',
   margin: '0 auto',
-  padding: '28px 18px 56px',
+  padding: '28px 18px 130px',
   boxSizing: 'border-box',
 }
 
@@ -108,24 +113,27 @@ const primaryButtonStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
 }
 
-  const secondaryButtonStyle: React.CSSProperties = {
-    border: '1px solid rgba(47, 107, 79, 0.18)',
-    borderRadius: 999,
-    background: '#eef4ef',
-    color: '#315f49',
-    padding: '11px 16px',
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-  }
+const secondaryButtonStyle: React.CSSProperties = {
+  border:
+    '1px solid rgba(47, 107, 79, 0.18)',
+  borderRadius: 999,
+  background: '#eef4ef',
+  color: '#315f49',
+  padding: '11px 16px',
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+}
 
 const cardStyle: React.CSSProperties = {
   overflow: 'hidden',
   borderRadius: 24,
   background: '#fff',
-  border: '1px solid rgba(43, 70, 54, 0.10)',
-  boxShadow: '0 12px 34px rgba(48, 65, 54, 0.08)',
+  border:
+    '1px solid rgba(43, 70, 54, 0.10)',
+  boxShadow:
+    '0 12px 34px rgba(48, 65, 54, 0.08)',
   marginBottom: 22,
 }
 
@@ -140,48 +148,151 @@ const chipStyle: React.CSSProperties = {
   fontWeight: 600,
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(value))
+const reasonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  borderRadius: 999,
+  padding: '6px 10px',
+  marginBottom: 13,
+  background: '#f3f6f1',
+  color: '#607368',
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.01em',
 }
 
-function formatCommentDate(value: string) {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat(
+    'pt-BR',
+    {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    },
+  ).format(new Date(value))
+}
+
+function formatCommentDate(
+  value: string,
+) {
+  return new Intl.DateTimeFormat(
+    'pt-BR',
+    {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    },
+  ).format(new Date(value))
+}
+
+function getDiscoveryTimestamp(
+  discovery: DiscoveryRow,
+) {
+  return new Date(
+    discovery.published_at ??
+      discovery.created_at,
+  ).getTime()
+}
+
+function getFeedReason(
+  sharedInterestCount: number,
+  fromFollowedProfile: boolean,
+) {
+  if (
+    sharedInterestCount > 0 &&
+    fromFollowedProfile
+  ) {
+    return 'Tem a ver com você · de alguém que você acompanha'
+  }
+
+  if (sharedInterestCount > 0) {
+    return 'Tem a ver com você'
+  }
+
+  if (fromFollowedProfile) {
+    return 'De alguém que você acompanha'
+  }
+
+  return 'Explore algo novo'
+}
+
+function getFeedReasonIcon(
+  discovery: Discovery,
+) {
+  if (
+    discovery.sharedInterestCount >
+      0 &&
+    discovery.fromFollowedProfile
+  ) {
+    return '✨'
+  }
+
+  if (
+    discovery.sharedInterestCount >
+    0
+  ) {
+    return '🌿'
+  }
+
+  if (
+    discovery.fromFollowedProfile
+  ) {
+    return '◉'
+  }
+
+  return '↗'
 }
 
 export default function Discover() {
   const navigate = useNavigate()
 
-  const [discoveries, setDiscoveries] =
-    useState<Discovery[]>([])
+  const [
+    discoveries,
+    setDiscoveries,
+  ] = useState<Discovery[]>([])
+
   const [loading, setLoading] =
     useState(true)
-  const [errorMessage, setErrorMessage] =
-    useState('')
-  const [currentUserId, setCurrentUserId] =
-    useState<string | null>(null)
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState('')
+
+  const [
+    currentUserId,
+    setCurrentUserId,
+  ] = useState<string | null>(
+    null,
+  )
 
   const [
     selectedInterestNames,
     setSelectedInterestNames,
   ] = useState<string[]>([])
 
-  const [reactionLoading, setReactionLoading] =
-    useState<Record<string, boolean>>({})
+  const [
+    reactionLoading,
+    setReactionLoading,
+  ] = useState<
+    Record<string, boolean>
+  >({})
 
-  const [commentDrafts, setCommentDrafts] =
-    useState<Record<string, string>>({})
+  const [
+    commentDrafts,
+    setCommentDrafts,
+  ] = useState<
+    Record<string, string>
+  >({})
 
-  const [commentLoading, setCommentLoading] =
-    useState<Record<string, boolean>>({})
+  const [
+    commentLoading,
+    setCommentLoading,
+  ] = useState<
+    Record<string, boolean>
+  >({})
 
   const loadDiscoveries =
     useCallback(async () => {
@@ -192,7 +303,8 @@ export default function Discover() {
         const {
           data: { user },
           error: userError,
-        } = await supabase.auth.getUser()
+        } =
+          await supabase.auth.getUser()
 
         if (userError) {
           throw userError
@@ -206,33 +318,78 @@ export default function Discover() {
 
         setCurrentUserId(user.id)
 
-        const {
-          data: selectedProfileInterests,
-          error:
-            selectedProfileInterestsError,
-        } = await supabase
-          .from('profile_interests')
-          .select('interest_id')
-          .eq('profile_id', user.id)
-          .eq('source', 'selected')
+        const [
+          selectedProfileInterestsResult,
+          followsResult,
+        ] = await Promise.all([
+          supabase
+            .from(
+              'profile_interests',
+            )
+            .select('interest_id')
+            .eq(
+              'profile_id',
+              user.id,
+            )
+            .eq(
+              'source',
+              'selected',
+            ),
+
+          supabase
+            .from('follows')
+            .select('following_id')
+            .eq(
+              'follower_id',
+              user.id,
+            ),
+        ])
 
         if (
-          selectedProfileInterestsError
+          selectedProfileInterestsResult.error
         ) {
-          throw selectedProfileInterestsError
+          throw selectedProfileInterestsResult.error
         }
 
-        const selectedInterestIds = (
-          selectedProfileInterests ?? []
-        ).map(
-          (item) => item.interest_id,
-        )
+        if (followsResult.error) {
+          throw followsResult.error
+        }
+
+        const selectedInterestIds =
+          (
+            selectedProfileInterestsResult.data ??
+            []
+          ).map(
+            (item) =>
+              item.interest_id,
+          )
+
+        const followedProfileIds =
+          (
+            followsResult.data ??
+            []
+          ).map(
+            (item) =>
+              item.following_id,
+          )
+
+        const selectedInterestIdSet =
+          new Set(
+            selectedInterestIds,
+          )
+
+        const followedProfileIdSet =
+          new Set(
+            followedProfileIds,
+          )
 
         if (
-          selectedInterestIds.length > 0
+          selectedInterestIds.length >
+          0
         ) {
           const {
-            data: selectedInterests,
+            data:
+              selectedInterests,
             error:
               selectedInterestsError,
           } = await supabase
@@ -243,12 +400,17 @@ export default function Discover() {
               selectedInterestIds,
             )
 
-          if (selectedInterestsError) {
+          if (
+            selectedInterestsError
+          ) {
             throw selectedInterestsError
           }
 
           setSelectedInterestNames(
-            (selectedInterests ?? [])
+            (
+              selectedInterests ??
+              []
+            )
               .map(
                 (interest) =>
                   interest.name,
@@ -261,7 +423,9 @@ export default function Discover() {
               ),
           )
         } else {
-          setSelectedInterestNames([])
+          setSelectedInterestNames(
+            [],
+          )
         }
 
         const {
@@ -413,7 +577,9 @@ export default function Discover() {
           throw discoveryInterestsResult.error
         }
 
-        if (interestsResult.error) {
+        if (
+          interestsResult.error
+        ) {
           throw interestsResult.error
         }
 
@@ -421,17 +587,23 @@ export default function Discover() {
           throw mediaResult.error
         }
 
-        if (reactionsResult.error) {
+        if (
+          reactionsResult.error
+        ) {
           throw reactionsResult.error
         }
 
-        if (commentsResult.error) {
+        if (
+          commentsResult.error
+        ) {
           throw commentsResult.error
         }
 
         const discoveryInterests =
-          (discoveryInterestsResult.data ??
-            []) as DiscoveryInterest[]
+          (
+            discoveryInterestsResult.data ??
+            []
+          ) as DiscoveryInterest[]
 
         const interests =
           (interestsResult.data ??
@@ -551,7 +723,9 @@ export default function Discover() {
             DiscoveryMedia
           >()
 
-        for (const mediaItem of media) {
+        for (
+          const mediaItem of media
+        ) {
           if (
             !firstMediaByDiscovery.has(
               mediaItem.discovery_id,
@@ -619,8 +793,7 @@ export default function Discover() {
           >()
 
         for (
-          const reaction of
-          reactions
+          const reaction of reactions
         ) {
           const list =
             reactionsByDiscovery.get(
@@ -688,10 +861,8 @@ export default function Discover() {
                 row.id,
               ) ?? []
 
-            return {
-              ...row,
-              authorName,
-              interests: (
+            const discoveryInterestsList =
+              (
                 interestsByDiscovery.get(
                   row.id,
                 ) ?? []
@@ -700,28 +871,111 @@ export default function Discover() {
                   b.name,
                   'pt-BR',
                 ),
-              ),
+              )
+
+            const sharedInterestCount =
+              discoveryInterestsList.filter(
+                (interest) =>
+                  selectedInterestIdSet.has(
+                    interest.id,
+                  ),
+              ).length
+
+            const fromFollowedProfile =
+              followedProfileIdSet.has(
+                row.author_id,
+              )
+
+            /*
+             * Feed inteligente v1
+             *
+             * Cada interesse em comum:
+             * +100 pontos
+             *
+             * Autor seguido:
+             * +60 pontos
+             *
+             * A recência entra apenas
+             * como desempate abaixo.
+             *
+             * Nenhuma descoberta é
+             * eliminada por pontuação.
+             */
+            const feedScore =
+              sharedInterestCount *
+                100 +
+              (fromFollowedProfile
+                ? 60
+                : 0)
+
+            return {
+              ...row,
+              authorName,
+
+              interests:
+                discoveryInterestsList,
+
               imageUrl:
                 signedUrlByDiscovery.get(
                   row.id,
                 ) ?? null,
+
               reactionCount:
                 discoveryReactions.length,
+
               reactedByMe:
                 discoveryReactions.some(
                   (reaction) =>
                     reaction.profile_id ===
                     user.id,
                 ),
+
               comments:
                 commentsByDiscovery.get(
                   row.id,
                 ) ?? [],
+
+              sharedInterestCount,
+
+              fromFollowedProfile,
+
+              feedScore,
+
+              feedReason:
+                getFeedReason(
+                  sharedInterestCount,
+                  fromFollowedProfile,
+                ),
             }
           },
         )
 
-        setDiscoveries(formatted)
+        formatted.sort(
+          (a, b) => {
+            if (
+              b.feedScore !==
+              a.feedScore
+            ) {
+              return (
+                b.feedScore -
+                a.feedScore
+              )
+            }
+
+            return (
+              getDiscoveryTimestamp(
+                b,
+              ) -
+              getDiscoveryTimestamp(
+                a,
+              )
+            )
+          },
+        )
+
+        setDiscoveries(
+          formatted,
+        )
       } catch (error) {
         console.error(error)
 
@@ -767,25 +1021,27 @@ export default function Discover() {
     const previousCount =
       discovery.reactionCount
 
-    setDiscoveries((current) =>
-      current.map((item) =>
-        item.id === discovery.id
-          ? {
-              ...item,
-              reactedByMe:
-                !previousReacted,
-              reactionCount:
-                previousReacted
-                  ? Math.max(
-                      0,
-                      previousCount -
-                        1,
-                    )
-                  : previousCount +
-                    1,
-            }
-          : item,
-      ),
+    setDiscoveries(
+      (current) =>
+        current.map((item) =>
+          item.id === discovery.id
+            ? {
+                ...item,
+                reactedByMe:
+                  !previousReacted,
+
+                reactionCount:
+                  previousReacted
+                    ? Math.max(
+                        0,
+                        previousCount -
+                          1,
+                      )
+                    : previousCount +
+                      1,
+              }
+            : item,
+        ),
     )
 
     try {
@@ -813,8 +1069,10 @@ export default function Discover() {
             .insert({
               profile_id:
                 currentUserId,
+
               discovery_id:
                 discovery.id,
+
               reaction_type:
                 'enchanted',
             })
@@ -826,18 +1084,22 @@ export default function Discover() {
     } catch (error) {
       console.error(error)
 
-      setDiscoveries((current) =>
-        current.map((item) =>
-          item.id === discovery.id
-            ? {
-                ...item,
-                reactedByMe:
-                  previousReacted,
-                reactionCount:
-                  previousCount,
-              }
-            : item,
-        ),
+      setDiscoveries(
+        (current) =>
+          current.map((item) =>
+            item.id ===
+            discovery.id
+              ? {
+                  ...item,
+
+                  reactedByMe:
+                    previousReacted,
+
+                  reactionCount:
+                    previousCount,
+                }
+              : item,
+          ),
       )
 
       setErrorMessage(
@@ -849,7 +1111,8 @@ export default function Discover() {
       setReactionLoading(
         (current) => ({
           ...current,
-          [discovery.id]: false,
+          [discovery.id]:
+            false,
         }),
       )
     }
@@ -901,11 +1164,15 @@ export default function Discover() {
         .insert({
           discovery_id:
             discoveryId,
+
           author_id:
             currentUserId,
+
           parent_comment_id:
             null,
+
           body,
+
           status: 'active',
         })
         .select(
@@ -961,20 +1228,22 @@ export default function Discover() {
         authorName,
       }
 
-      setDiscoveries((current) =>
-        current.map(
-          (discovery) =>
-            discovery.id ===
-            discoveryId
-              ? {
-                  ...discovery,
-                  comments: [
-                    ...discovery.comments,
-                    newComment,
-                  ],
-                }
-              : discovery,
-        ),
+      setDiscoveries(
+        (current) =>
+          current.map(
+            (discovery) =>
+              discovery.id ===
+              discoveryId
+                ? {
+                    ...discovery,
+
+                    comments: [
+                      ...discovery.comments,
+                      newComment,
+                    ],
+                  }
+                : discovery,
+          ),
       )
 
       setCommentDrafts(
@@ -1020,7 +1289,11 @@ export default function Discover() {
   return (
     <main style={pageStyle}>
       <div style={contentStyle}>
-        <header style={headerStyle}>
+        <header
+          style={
+            headerStyle
+          }
+        >
           <div>
             <div
               style={{
@@ -1051,59 +1324,78 @@ export default function Discover() {
           </div>
 
           <div
-  style={{
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 9,
-    flexWrap: 'wrap',
-  }}
->
-  <button
-    type="button"
-    style={
-      secondaryButtonStyle
-    }
-    disabled={!currentUserId}
-    onClick={() => {
-      if (!currentUserId) {
-        return
-      }
+            style={{
+              display: 'flex',
+              alignItems:
+                'center',
+              justifyContent:
+                'flex-end',
+              gap: 9,
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              type="button"
+              style={
+                secondaryButtonStyle
+              }
+              disabled={
+                !currentUserId
+              }
+              onClick={() => {
+                if (
+                  !currentUserId
+                ) {
+                  return
+                }
 
-      navigate(
-        `/profile/${currentUserId}`,
-      )
-    }}
-  >
-    Eu · Meu perfil
-  </button>
+                navigate(
+                  `/profile/${currentUserId}`,
+                )
+              }}
+            >
+              Eu · Meu perfil
+            </button>
 
-    <button
-      type="button"
-      style={
-        primaryButtonStyle
-      }
-      onClick={() =>
-        navigate(
-          '/discover/new',
-        )
-      }
-    >
-      + Nova descoberta
-    </button>
-</div>
+            <button
+              type="button"
+              style={
+                primaryButtonStyle
+              }
+              onClick={() =>
+                navigate(
+                  '/discover/new',
+                )
+              }
+            >
+              + Nova descoberta
+            </button>
+          </div>
         </header>
 
         <p
           style={{
-            margin:
-              '0 0 28px',
+            margin: '0 0 8px',
             color: '#6c776f',
             lineHeight: 1.55,
             fontSize: 14,
           }}
         >
           {feedSubtitle}
+        </p>
+
+        <p
+          style={{
+            margin: '0 0 28px',
+            color: '#879087',
+            lineHeight: 1.5,
+            fontSize: 12,
+          }}
+        >
+          O feed aproxima seus
+          interesses e suas conexões,
+          sem fechar a porta para o
+          inesperado.
         </p>
 
         {errorMessage && (
@@ -1163,9 +1455,8 @@ export default function Discover() {
                 color: '#284334',
               }}
             >
-              O mundo está
-              esperando sua
-              primeira descoberta.
+              O mundo está esperando
+              sua primeira descoberta.
             </h2>
 
             <p
@@ -1177,10 +1468,9 @@ export default function Discover() {
                 color: '#6e786f',
               }}
             >
-              Observe algo que
-              chamou sua atenção e
-              compartilhe com quem
-              também gosta de
+              Observe algo que chamou
+              sua atenção e compartilhe
+              com quem também gosta de
               descobrir.
             </p>
 
@@ -1205,13 +1495,14 @@ export default function Discover() {
                 key={
                   discovery.id
                 }
-                style={cardStyle}
+                style={
+                  cardStyle
+                }
               >
                 {discovery.imageUrl && (
                   <div
                     style={{
-                      width:
-                        '100%',
+                      width: '100%',
                       aspectRatio:
                         '16 / 9',
                       background:
@@ -1258,7 +1549,7 @@ export default function Discover() {
                       gap: 12,
                       alignItems:
                         'flex-start',
-                      marginBottom: 16,
+                      marginBottom: 13,
                     }}
                   >
                     <div>
@@ -1279,7 +1570,8 @@ export default function Discover() {
                           margin: 0,
                           fontFamily:
                             'inherit',
-                          fontWeight: 750,
+                          fontWeight:
+                            750,
                           color:
                             '#365541',
                           fontSize: 14,
@@ -1311,6 +1603,27 @@ export default function Discover() {
                     </div>
                   </div>
 
+                  <div
+                    style={
+                      reasonStyle
+                    }
+                    title="Por que esta descoberta aparece aqui"
+                  >
+                    <span
+                      aria-hidden="true"
+                    >
+                      {getFeedReasonIcon(
+                        discovery,
+                      )}
+                    </span>
+
+                    <span>
+                      {
+                        discovery.feedReason
+                      }
+                    </span>
+                  </div>
+
                   {discovery.title && (
                     <h2
                       style={{
@@ -1322,9 +1635,7 @@ export default function Discover() {
                         lineHeight: 1.2,
                       }}
                     >
-                      {
-                        discovery.title
-                      }
+                      {discovery.title}
                     </h2>
                   )}
 
@@ -1503,10 +1814,8 @@ export default function Discover() {
                           fontSize: 12,
                         }}
                       >
-                        {discovery
-                          .comments
-                          .length ===
-                        0
+                        {discovery.comments
+                          .length === 0
                           ? 'Nenhum ainda'
                           : discovery
                                 .comments
@@ -1517,8 +1826,7 @@ export default function Discover() {
                       </span>
                     </div>
 
-                    {discovery
-                      .comments
+                    {discovery.comments
                       .length > 0 && (
                       <div
                         style={{
@@ -1591,9 +1899,7 @@ export default function Discover() {
                                     'pre-wrap',
                                 }}
                               >
-                                {
-                                  comment.body
-                                }
+                                {comment.body}
                               </div>
                             </div>
                           ),
@@ -1632,6 +1938,7 @@ export default function Discover() {
                               current,
                             ) => ({
                               ...current,
+
                               [discovery.id]:
                                 event
                                   .target
@@ -1689,8 +1996,7 @@ export default function Discover() {
                             '10px 14px',
                           background:
                             '#315f49',
-                          color:
-                            '#fff',
+                          color: '#fff',
                           fontSize: 13,
                           fontWeight: 700,
                           cursor:
