@@ -4,11 +4,15 @@ import {
   useMemo,
   useState,
 } from 'react'
+
 import {
   useNavigate,
   useParams,
 } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
+
+import {
+  supabase,
+} from '../lib/supabaseClient'
 
 import MainNavigation from '../components/MainNavigation'
 
@@ -18,6 +22,7 @@ type Profile = {
   display_name: string | null
   bio: string | null
   avatar_path: string | null
+  cover_path: string | null
   city: string | null
   state: string | null
   country: string | null
@@ -49,41 +54,73 @@ type DiscoveryInterestRelation = {
   interest_id: string
 }
 
-type ProfileDiscovery = ProfileDiscoveryRow & {
-  imageUrl: string | null
-  interests: Interest[]
-}
+type ProfileDiscovery =
+  ProfileDiscoveryRow & {
+    imageUrl: string | null
+    interests: Interest[]
+  }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(value))
+function formatDate(
+  value: string,
+) {
+  return new Intl.DateTimeFormat(
+    'pt-BR',
+    {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    },
+  ).format(new Date(value))
 }
 
 function PublicProfile() {
-  const navigate = useNavigate()
+  const navigate =
+    useNavigate()
 
-  const { profileId } = useParams<{
-    profileId: string
-  }>()
+  const { profileId } =
+    useParams<{
+      profileId: string
+    }>()
 
-  const [profile, setProfile] =
-    useState<Profile | null>(null)
+  const [
+    profile,
+    setProfile,
+  ] =
+    useState<Profile | null>(
+      null,
+    )
 
   const [
     profileDiscoveries,
     setProfileDiscoveries,
-  ] = useState<ProfileDiscovery[]>([])
+  ] =
+    useState<
+      ProfileDiscovery[]
+    >([])
 
   const [
     currentUserId,
     setCurrentUserId,
-  ] = useState<string | null>(null)
+  ] =
+    useState<string | null>(
+      null,
+    )
 
-  const [avatarUrl, setAvatarUrl] =
-    useState<string | null>(null)
+  const [
+    avatarUrl,
+    setAvatarUrl,
+  ] =
+    useState<string | null>(
+      null,
+    )
+
+  const [
+    coverUrl,
+    setCoverUrl,
+  ] =
+    useState<string | null>(
+      null,
+    )
 
   const [
     followersCount,
@@ -105,565 +142,697 @@ function PublicProfile() {
     setIsFollowing,
   ] = useState(false)
 
-  const [loading, setLoading] =
-    useState(true)
+  const [
+    loading,
+    setLoading,
+  ] = useState(true)
 
   const [
     followLoading,
     setFollowLoading,
   ] = useState(false)
 
-  const [error, setError] =
-    useState<string | null>(null)
-
-  const isOwnProfile = useMemo(
-    () =>
-      Boolean(
-        currentUserId &&
-          profileId &&
-          currentUserId === profileId,
-      ),
-    [currentUserId, profileId],
-  )
-
-  const displayName = useMemo(() => {
-    if (!profile) {
-      return ''
-    }
-
-    return (
-      profile.display_name ||
-      profile.username ||
-      'Explorador'
+  const [
+    error,
+    setError,
+  ] =
+    useState<string | null>(
+      null,
     )
-  }, [profile])
 
-  const locationLabel = useMemo(() => {
-    if (!profile) {
-      return ''
-    }
+  const isOwnProfile =
+    useMemo(
+      () =>
+        Boolean(
+          currentUserId &&
+            profileId &&
+            currentUserId ===
+              profileId,
+        ),
+      [
+        currentUserId,
+        profileId,
+      ],
+    )
 
-    return [
-      profile.city,
-      profile.state,
-      profile.country,
-    ]
-      .filter(Boolean)
-      .join(' · ')
-  }, [profile])
-
-  const loadProfile = useCallback(
-    async () => {
-      if (!profileId) {
-        setError(
-          'Perfil não encontrado.',
-        )
-        setLoading(false)
-        return
+  const displayName =
+    useMemo(() => {
+      if (!profile) {
+        return ''
       }
 
-      setLoading(true)
-      setError(null)
-      setProfileDiscoveries([])
+      return (
+        profile.display_name ||
+        profile.username ||
+        'Explorador'
+      )
+    }, [profile])
 
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } =
-          await supabase.auth.getUser()
+  const locationLabel =
+    useMemo(() => {
+      if (!profile) {
+        return ''
+      }
 
-        if (userError) {
-          throw userError
-        }
+      return [
+        profile.city,
+        profile.state,
+        profile.country,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    }, [profile])
 
-        if (!user) {
-          navigate('/login', {
-            replace: true,
-          })
-          return
-        }
-
-        setCurrentUserId(user.id)
-
-        const {
-          data: profileData,
-          error: profileError,
-        } = await supabase
-          .from('profiles')
-          .select(
-            `
-              id,
-              username,
-              display_name,
-              bio,
-              avatar_path,
-              city,
-              state,
-              country
-            `,
-          )
-          .eq('id', profileId)
-          .maybeSingle()
-
-        if (profileError) {
-          throw profileError
-        }
-
-        if (!profileData) {
-          setProfile(null)
+  const loadProfile =
+    useCallback(
+      async () => {
+        if (!profileId) {
           setError(
-            'Este perfil não está disponível.',
+            'Perfil não encontrado.',
           )
+          setLoading(false)
           return
         }
 
-        const typedProfile =
-          profileData as Profile
+        setLoading(true)
+        setError(null)
+        setProfileDiscoveries([])
+        setAvatarUrl(null)
+        setCoverUrl(null)
 
-        setProfile(typedProfile)
-
-        if (
-          typedProfile.avatar_path
-        ) {
+        try {
           const {
-            data: signedAvatar,
-            error: avatarError,
-          } = await supabase.storage
-            .from('avatars')
-            .createSignedUrl(
-              typedProfile.avatar_path,
-              60 * 60,
-            )
+            data: { user },
+            error: userError,
+          } =
+            await supabase.auth.getUser()
 
-          if (!avatarError) {
-            setAvatarUrl(
-              signedAvatar?.signedUrl ??
-                null,
-            )
-          } else {
-            setAvatarUrl(null)
+          if (userError) {
+            throw userError
           }
-        } else {
-          setAvatarUrl(null)
-        }
 
-        const [
-          followersResult,
-          followingResult,
-          discoveriesResult,
-        ] = await Promise.all([
-          supabase
-            .from('follows')
-            .select('*', {
-              count: 'exact',
-              head: true,
+          if (!user) {
+            navigate('/login', {
+              replace: true,
             })
-            .eq(
-              'following_id',
-              profileId,
-            ),
+            return
+          }
 
-          supabase
-            .from('follows')
-            .select('*', {
-              count: 'exact',
-              head: true,
-            })
-            .eq(
-              'follower_id',
-              profileId,
-            ),
+          setCurrentUserId(user.id)
 
-          supabase
-            .from('discoveries')
-            .select('*', {
-              count: 'exact',
-              head: true,
-            })
-            .eq(
-              'author_id',
-              profileId,
-            )
-            .eq(
-              'status',
-              'published',
-            )
-            .eq(
-              'visibility',
-              'public',
-            ),
-        ])
-
-        if (
-          followersResult.error
-        ) {
-          throw followersResult.error
-        }
-
-        if (
-          followingResult.error
-        ) {
-          throw followingResult.error
-        }
-
-        if (
-          discoveriesResult.error
-        ) {
-          throw discoveriesResult.error
-        }
-
-        setFollowersCount(
-          followersResult.count ?? 0,
-        )
-
-        setFollowingCount(
-          followingResult.count ?? 0,
-        )
-
-        setDiscoveriesCount(
-          discoveriesResult.count ?? 0,
-        )
-
-        const {
-          data: discoveryRows,
-          error:
-            profileDiscoveriesError,
-        } = await supabase
-          .from('discoveries')
-          .select(
-            `
-              id,
-              author_id,
-              title,
-              body,
-              created_at,
-              published_at
-            `,
-          )
-          .eq(
-            'author_id',
-            profileId,
-          )
-          .eq(
-            'status',
-            'published',
-          )
-          .eq(
-            'visibility',
-            'public',
-          )
-          .order('published_at', {
-            ascending: false,
-            nullsFirst: false,
-          })
-          .order('created_at', {
-            ascending: false,
-          })
-
-        if (
-          profileDiscoveriesError
-        ) {
-          throw profileDiscoveriesError
-        }
-
-        const discoveryRowsTyped =
-          (discoveryRows ??
-            []) as ProfileDiscoveryRow[]
-
-        if (
-          discoveryRowsTyped.length >
-          0
-        ) {
-          const discoveryIds =
-            discoveryRowsTyped.map(
-              (discovery) =>
-                discovery.id,
-            )
-
-          const [
-            mediaResult,
-            discoveryInterestsResult,
-          ] = await Promise.all([
-            supabase
-              .from(
-                'discovery_media',
-              )
+          const {
+            data: profileData,
+            error: profileError,
+          } =
+            await supabase
+              .from('profiles')
               .select(
                 `
                   id,
-                  discovery_id,
-                  storage_path,
-                  position
+                  username,
+                  display_name,
+                  bio,
+                  avatar_path,
+                  cover_path,
+                  city,
+                  state,
+                  country
                 `,
               )
-              .in(
-                'discovery_id',
-                discoveryIds,
-              )
-              .order('position', {
-                ascending: true,
-              }),
-
-            supabase
-              .from(
-                'discovery_interests',
-              )
-              .select(
-                `
-                  discovery_id,
-                  interest_id
-                `,
-              )
-              .in(
-                'discovery_id',
-                discoveryIds,
-              ),
-          ])
-
-          if (mediaResult.error) {
-            throw mediaResult.error
-          }
-
-          if (
-            discoveryInterestsResult.error
-          ) {
-            throw discoveryInterestsResult.error
-          }
-
-          const media =
-            (mediaResult.data ??
-              []) as DiscoveryMedia[]
-
-          const discoveryInterests =
-            (discoveryInterestsResult.data ??
-              []) as DiscoveryInterestRelation[]
-
-          const interestIds = [
-            ...new Set(
-              discoveryInterests.map(
-                (relation) =>
-                  relation.interest_id,
-              ),
-            ),
-          ]
-
-          let interests: Interest[] =
-            []
-
-          if (
-            interestIds.length > 0
-          ) {
-            const {
-              data: interestsData,
-              error:
-                interestsError,
-            } = await supabase
-              .from('interests')
-              .select('id, name')
-              .in(
+              .eq(
                 'id',
-                interestIds,
+                profileId,
               )
+              .maybeSingle()
 
-            if (interestsError) {
-              throw interestsError
-            }
-
-            interests =
-              (interestsData ??
-                []) as Interest[]
+          if (profileError) {
+            throw profileError
           }
 
-          const interestMap =
-            new Map(
-              interests.map(
-                (interest) => [
-                  interest.id,
-                  interest,
-                ],
-              ),
+          if (!profileData) {
+            setProfile(null)
+            setError(
+              'Este perfil não está disponível.',
             )
-
-          const interestsByDiscovery =
-            new Map<
-              string,
-              Interest[]
-            >()
-
-          for (
-            const relation of
-            discoveryInterests
-          ) {
-            const interest =
-              interestMap.get(
-                relation.interest_id,
-              )
-
-            if (!interest) {
-              continue
-            }
-
-            const current =
-              interestsByDiscovery.get(
-                relation.discovery_id,
-              ) ?? []
-
-            current.push(interest)
-
-            interestsByDiscovery.set(
-              relation.discovery_id,
-              current,
-            )
+            return
           }
 
-          const firstMediaByDiscovery =
-            new Map<
-              string,
-              DiscoveryMedia
-            >()
+          const typedProfile =
+            profileData as Profile
 
-          for (
-            const mediaItem of media
+          setProfile(
+            typedProfile,
+          )
+
+          const imageRequests:
+            Promise<void>[] = []
+
+          if (
+            typedProfile.avatar_path
           ) {
-            if (
-              !firstMediaByDiscovery.has(
-                mediaItem.discovery_id,
-              )
-            ) {
-              firstMediaByDiscovery.set(
-                mediaItem.discovery_id,
-                mediaItem,
-              )
-            }
-          }
-
-          const signedUrlByDiscovery =
-            new Map<
-              string,
-              string | null
-            >()
-
-          await Promise.all(
-            Array.from(
-              firstMediaByDiscovery.entries(),
-            ).map(
-              async ([
-                discoveryId,
-                mediaItem,
-              ]) => {
+            imageRequests.push(
+              (async () => {
                 const {
-                  data,
+                  data:
+                    signedAvatar,
                   error:
-                    signedUrlError,
+                    avatarError,
                 } =
                   await supabase.storage
-                    .from(
-                      'discovery-media',
-                    )
+                    .from('avatars')
                     .createSignedUrl(
-                      mediaItem.storage_path,
+                      typedProfile
+                        .avatar_path!,
                       60 * 60,
                     )
 
                 if (
-                  signedUrlError
+                  avatarError
                 ) {
                   console.error(
-                    'Erro ao gerar URL da descoberta:',
-                    signedUrlError,
+                    'Erro ao carregar avatar:',
+                    avatarError,
                   )
-
-                  signedUrlByDiscovery.set(
-                    discoveryId,
-                    null,
-                  )
-
                   return
                 }
 
-                signedUrlByDiscovery.set(
-                  discoveryId,
-                  data.signedUrl,
+                setAvatarUrl(
+                  signedAvatar
+                    ?.signedUrl ??
+                    null,
                 )
-              },
-            ),
-          )
-
-          const formatted =
-            discoveryRowsTyped.map(
-              (discovery) => ({
-                ...discovery,
-                imageUrl:
-                  signedUrlByDiscovery.get(
-                    discovery.id,
-                  ) ?? null,
-                interests: (
-                  interestsByDiscovery.get(
-                    discovery.id,
-                  ) ?? []
-                ).sort((a, b) =>
-                  a.name.localeCompare(
-                    b.name,
-                    'pt-BR',
-                  ),
-                ),
-              }),
+              })(),
             )
-
-          setProfileDiscoveries(
-            formatted,
-          )
-        } else {
-          setProfileDiscoveries([])
-        }
-
-        if (
-          user.id !== profileId
-        ) {
-          const {
-            data: followData,
-            error: followError,
-          } = await supabase
-            .from('follows')
-            .select(
-              'follower_id, following_id',
-            )
-            .eq(
-              'follower_id',
-              user.id,
-            )
-            .eq(
-              'following_id',
-              profileId,
-            )
-            .maybeSingle()
-
-          if (followError) {
-            throw followError
           }
 
-          setIsFollowing(
-            Boolean(followData),
-          )
-        } else {
-          setIsFollowing(false)
-        }
-      } catch (err) {
-        console.error(
-          'Erro ao carregar perfil:',
-          err,
-        )
+          if (
+            typedProfile.cover_path
+          ) {
+            imageRequests.push(
+              (async () => {
+                const {
+                  data:
+                    signedCover,
+                  error:
+                    coverError,
+                } =
+                  await supabase.storage
+                    .from(
+                      'profile-covers',
+                    )
+                    .createSignedUrl(
+                      typedProfile
+                        .cover_path!,
+                      60 * 60,
+                    )
 
-        setError(
-          'Não foi possível carregar este perfil.',
-        )
-      } finally {
-        setLoading(false)
-      }
-    },
-    [navigate, profileId],
-  )
+                if (
+                  coverError
+                ) {
+                  console.error(
+                    'Erro ao carregar Meu Horizonte:',
+                    coverError,
+                  )
+                  return
+                }
+
+                setCoverUrl(
+                  signedCover
+                    ?.signedUrl ??
+                    null,
+                )
+              })(),
+            )
+          }
+
+          await Promise.all(
+            imageRequests,
+          )
+
+          const [
+            followersResult,
+            followingResult,
+            discoveriesResult,
+          ] =
+            await Promise.all([
+              supabase
+                .from('follows')
+                .select('*', {
+                  count: 'exact',
+                  head: true,
+                })
+                .eq(
+                  'following_id',
+                  profileId,
+                ),
+
+              supabase
+                .from('follows')
+                .select('*', {
+                  count: 'exact',
+                  head: true,
+                })
+                .eq(
+                  'follower_id',
+                  profileId,
+                ),
+
+              supabase
+                .from(
+                  'discoveries',
+                )
+                .select('*', {
+                  count: 'exact',
+                  head: true,
+                })
+                .eq(
+                  'author_id',
+                  profileId,
+                )
+                .eq(
+                  'status',
+                  'published',
+                )
+                .eq(
+                  'visibility',
+                  'public',
+                ),
+            ])
+
+          if (
+            followersResult.error
+          ) {
+            throw followersResult.error
+          }
+
+          if (
+            followingResult.error
+          ) {
+            throw followingResult.error
+          }
+
+          if (
+            discoveriesResult.error
+          ) {
+            throw discoveriesResult.error
+          }
+
+          setFollowersCount(
+            followersResult.count ?? 0,
+          )
+
+          setFollowingCount(
+            followingResult.count ?? 0,
+          )
+
+          setDiscoveriesCount(
+            discoveriesResult.count ?? 0,
+          )
+
+          const {
+            data:
+              discoveryRows,
+            error:
+              profileDiscoveriesError,
+          } =
+            await supabase
+              .from(
+                'discoveries',
+              )
+              .select(
+                `
+                  id,
+                  author_id,
+                  title,
+                  body,
+                  created_at,
+                  published_at
+                `,
+              )
+              .eq(
+                'author_id',
+                profileId,
+              )
+              .eq(
+                'status',
+                'published',
+              )
+              .eq(
+                'visibility',
+                'public',
+              )
+              .order(
+                'published_at',
+                {
+                  ascending:
+                    false,
+                  nullsFirst:
+                    false,
+                },
+              )
+              .order(
+                'created_at',
+                {
+                  ascending:
+                    false,
+                },
+              )
+
+          if (
+            profileDiscoveriesError
+          ) {
+            throw profileDiscoveriesError
+          }
+
+          const discoveryRowsTyped =
+            (discoveryRows ??
+              []) as ProfileDiscoveryRow[]
+
+          if (
+            discoveryRowsTyped.length >
+            0
+          ) {
+            const discoveryIds =
+              discoveryRowsTyped.map(
+                (discovery) =>
+                  discovery.id,
+              )
+
+            const [
+              mediaResult,
+              discoveryInterestsResult,
+            ] =
+              await Promise.all([
+                supabase
+                  .from(
+                    'discovery_media',
+                  )
+                  .select(
+                    `
+                      id,
+                      discovery_id,
+                      storage_path,
+                      position
+                    `,
+                  )
+                  .in(
+                    'discovery_id',
+                    discoveryIds,
+                  )
+                  .order(
+                    'position',
+                    {
+                      ascending: true,
+                    },
+                  ),
+
+                supabase
+                  .from(
+                    'discovery_interests',
+                  )
+                  .select(
+                    `
+                      discovery_id,
+                      interest_id
+                    `,
+                  )
+                  .in(
+                    'discovery_id',
+                    discoveryIds,
+                  ),
+              ])
+
+            if (
+              mediaResult.error
+            ) {
+              throw mediaResult.error
+            }
+
+            if (
+              discoveryInterestsResult
+                .error
+            ) {
+              throw discoveryInterestsResult.error
+            }
+
+            const media =
+              (mediaResult.data ??
+                []) as DiscoveryMedia[]
+
+            const discoveryInterests =
+              (discoveryInterestsResult.data ??
+                []) as DiscoveryInterestRelation[]
+
+            const interestIds = [
+              ...new Set(
+                discoveryInterests.map(
+                  (relation) =>
+                    relation.interest_id,
+                ),
+              ),
+            ]
+
+            let interests:
+              Interest[] = []
+
+            if (
+              interestIds.length >
+              0
+            ) {
+              const {
+                data:
+                  interestsData,
+                error:
+                  interestsError,
+              } =
+                await supabase
+                  .from(
+                    'interests',
+                  )
+                  .select(
+                    'id, name',
+                  )
+                  .in(
+                    'id',
+                    interestIds,
+                  )
+
+              if (
+                interestsError
+              ) {
+                throw interestsError
+              }
+
+              interests =
+                (interestsData ??
+                  []) as Interest[]
+            }
+
+            const interestMap =
+              new Map(
+                interests.map(
+                  (interest) => [
+                    interest.id,
+                    interest,
+                  ],
+                ),
+              )
+
+            const interestsByDiscovery =
+              new Map<
+                string,
+                Interest[]
+              >()
+
+            for (
+              const relation of
+              discoveryInterests
+            ) {
+              const interest =
+                interestMap.get(
+                  relation.interest_id,
+                )
+
+              if (!interest) {
+                continue
+              }
+
+              const current =
+                interestsByDiscovery.get(
+                  relation.discovery_id,
+                ) ?? []
+
+              current.push(
+                interest,
+              )
+
+              interestsByDiscovery.set(
+                relation.discovery_id,
+                current,
+              )
+            }
+
+            const firstMediaByDiscovery =
+              new Map<
+                string,
+                DiscoveryMedia
+              >()
+
+            for (
+              const mediaItem of
+              media
+            ) {
+              if (
+                !firstMediaByDiscovery.has(
+                  mediaItem.discovery_id,
+                )
+              ) {
+                firstMediaByDiscovery.set(
+                  mediaItem.discovery_id,
+                  mediaItem,
+                )
+              }
+            }
+
+            const signedUrlByDiscovery =
+              new Map<
+                string,
+                string | null
+              >()
+
+            await Promise.all(
+              Array.from(
+                firstMediaByDiscovery.entries(),
+              ).map(
+                async ([
+                  discoveryId,
+                  mediaItem,
+                ]) => {
+                  const {
+                    data,
+                    error:
+                      signedUrlError,
+                  } =
+                    await supabase.storage
+                      .from(
+                        'discovery-media',
+                      )
+                      .createSignedUrl(
+                        mediaItem.storage_path,
+                        60 * 60,
+                      )
+
+                  if (
+                    signedUrlError
+                  ) {
+                    console.error(
+                      'Erro ao gerar URL da descoberta:',
+                      signedUrlError,
+                    )
+
+                    signedUrlByDiscovery.set(
+                      discoveryId,
+                      null,
+                    )
+
+                    return
+                  }
+
+                  signedUrlByDiscovery.set(
+                    discoveryId,
+                    data.signedUrl,
+                  )
+                },
+              ),
+            )
+
+            const formatted =
+              discoveryRowsTyped.map(
+                (discovery) => ({
+                  ...discovery,
+
+                  imageUrl:
+                    signedUrlByDiscovery.get(
+                      discovery.id,
+                    ) ?? null,
+
+                  interests: (
+                    interestsByDiscovery.get(
+                      discovery.id,
+                    ) ?? []
+                  ).sort(
+                    (a, b) =>
+                      a.name.localeCompare(
+                        b.name,
+                        'pt-BR',
+                      ),
+                  ),
+                }),
+              )
+
+            setProfileDiscoveries(
+              formatted,
+            )
+          } else {
+            setProfileDiscoveries([])
+          }
+
+          if (
+            user.id !== profileId
+          ) {
+            const {
+              data: followData,
+              error: followError,
+            } =
+              await supabase
+                .from('follows')
+                .select(
+                  'follower_id, following_id',
+                )
+                .eq(
+                  'follower_id',
+                  user.id,
+                )
+                .eq(
+                  'following_id',
+                  profileId,
+                )
+                .maybeSingle()
+
+            if (
+              followError
+            ) {
+              throw followError
+            }
+
+            setIsFollowing(
+              Boolean(
+                followData,
+              ),
+            )
+          } else {
+            setIsFollowing(
+              false,
+            )
+          }
+        } catch (err) {
+          console.error(
+            'Erro ao carregar perfil:',
+            err,
+          )
+
+          setError(
+            'Não foi possível carregar este perfil.',
+          )
+        } finally {
+          setLoading(false)
+        }
+      },
+      [
+        navigate,
+        profileId,
+      ],
+    )
 
   useEffect(() => {
     void loadProfile()
@@ -703,37 +872,48 @@ function PublicProfile() {
     )
 
     try {
-      if (previousFollowing) {
+      if (
+        previousFollowing
+      ) {
         const {
-          error: deleteError,
-        } = await supabase
-          .from('follows')
-          .delete()
-          .eq(
-            'follower_id',
-            currentUserId,
-          )
-          .eq(
-            'following_id',
-            profileId,
-          )
+          error:
+            deleteError,
+        } =
+          await supabase
+            .from('follows')
+            .delete()
+            .eq(
+              'follower_id',
+              currentUserId,
+            )
+            .eq(
+              'following_id',
+              profileId,
+            )
 
-        if (deleteError) {
+        if (
+          deleteError
+        ) {
           throw deleteError
         }
       } else {
         const {
-          error: insertError,
-        } = await supabase
-          .from('follows')
-          .insert({
-            follower_id:
-              currentUserId,
-            following_id:
-              profileId,
-          })
+          error:
+            insertError,
+        } =
+          await supabase
+            .from('follows')
+            .insert({
+              follower_id:
+                currentUserId,
 
-        if (insertError) {
+              following_id:
+                profileId,
+            })
+
+        if (
+          insertError
+        ) {
           throw insertError
         }
       }
@@ -761,8 +941,12 @@ function PublicProfile() {
 
   if (loading) {
     return (
-      <main style={styles.page}>
-        <div style={styles.shell}>
+      <main
+        style={styles.page}
+      >
+        <div
+          style={styles.shell}
+        >
           <p
             style={
               styles.statusText
@@ -777,12 +961,18 @@ function PublicProfile() {
 
   if (!profile) {
     return (
-      <main style={styles.page}>
-        <div style={styles.shell}>
+      <main
+        style={styles.page}
+      >
+        <div
+          style={styles.shell}
+        >
           <button
             type="button"
             onClick={() =>
-              navigate('/discover')
+              navigate(
+                '/discover',
+              )
             }
             style={
               styles.backButton
@@ -827,222 +1017,341 @@ function PublicProfile() {
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.shell}>
-        <button
-          type="button"
-          onClick={() =>
-            navigate('/discover')
+    <main
+      style={styles.page}
+    >
+      <div
+        style={styles.shell}
+      >
+        <div
+          style={
+            styles.topBar
           }
-          style={styles.backButton}
         >
-          ← Descobrir
-        </button>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(-1)
+            }
+            style={
+              styles.backButton
+            }
+          >
+            <span
+              style={
+                styles.backArrow
+              }
+            >
+              ←
+            </span>
+
+            <span>
+              Voltar
+            </span>
+          </button>
+        </div>
 
         <section
-          style={styles.profileCard}
+          style={
+            styles.profileCard
+          }
         >
           <div
-            style={styles.profileTop}
+            style={
+              styles.horizon
+            }
           >
-            <div
-              style={styles.avatar}
-            >
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={`Foto de ${displayName}`}
-                  style={
-                    styles.avatarImage
-                  }
-                />
-              ) : (
+            {coverUrl ? (
+              <img
+                src={coverUrl}
+                alt={`Meu Horizonte de ${displayName}`}
+                style={
+                  styles.horizonImage
+                }
+              />
+            ) : (
+              <div
+                style={
+                  styles.horizonPlaceholder
+                }
+              >
                 <span
                   style={
-                    styles.avatarPlaceholder
+                    styles.horizonSymbol
                   }
                 >
-                  {displayName
-                    .slice(0, 1)
-                    .toUpperCase()}
+                  ✦
                 </span>
-              )}
-            </div>
+              </div>
+            )}
 
             <div
-              style={styles.identity}
-            >
-              <h1
-                style={
-                  styles.displayName
-                }
-              >
-                {displayName}
-              </h1>
-
-              {profile.username && (
-                <div
-                  style={
-                    styles.username
-                  }
-                >
-                  @{profile.username}
-                </div>
-              )}
-
-              {locationLabel && (
-                <div
-                  style={
-                    styles.location
-                  }
-                >
-                  📍 {locationLabel}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {profile.bio && (
-            <p style={styles.bio}>
-              {profile.bio}
-            </p>
-          )}
-
-          <div style={styles.stats}>
-            <div style={styles.stat}>
-              <strong
-                style={
-                  styles.statNumber
-                }
-              >
-                {discoveriesCount}
-              </strong>
-
-              <span
-                style={
-                  styles.statLabel
-                }
-              >
-                {discoveriesCount === 1
-                  ? 'descoberta'
-                  : 'descobertas'}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  `/profile/${profileId}/connections?type=followers`,
-                )
+              style={
+                styles.horizonShade
               }
-              style={{
-                ...styles.stat,
-                ...styles.statButton,
-              }}
-              aria-label="Ver seguidores"
-            >
-              <strong
-                style={
-                  styles.statNumber
-                }
-              >
-                {followersCount}
-              </strong>
+            />
 
-              <span
-                style={
-                  styles.statLabel
-                }
-              >
-                {followersCount === 1
-                  ? 'seguidor'
-                  : 'seguidores'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  `/profile/${profileId}/connections?type=following`,
-                )
+            <div
+              style={
+                styles.horizonLabel
               }
-              style={{
-                ...styles.stat,
-                ...styles.statButton,
-              }}
-              aria-label="Ver pessoas seguidas"
             >
-              <strong
-                style={
-                  styles.statNumber
-                }
-              >
-                {followingCount}
-              </strong>
-
-              <span
-                style={
-                  styles.statLabel
-                }
-              >
-                seguindo
-              </span>
-            </button>
+              Meu Horizonte
+            </div>
           </div>
 
           <div
             style={
-              styles.actionArea
+              styles.profileBody
             }
           >
-            {isOwnProfile ? (
+            <div
+              style={
+                styles.identityBlock
+              }
+            >
               <div
                 style={
-                  styles.ownProfileBadge
+                  styles.avatar
                 }
               >
-                Este é você
+                {avatarUrl ? (
+                  <img
+                    src={
+                      avatarUrl
+                    }
+                    alt={`Foto de ${displayName}`}
+                    style={
+                      styles.avatarImage
+                    }
+                  />
+                ) : (
+                  <span
+                    style={
+                      styles.avatarPlaceholder
+                    }
+                  >
+                    {displayName
+                      .slice(
+                        0,
+                        1,
+                      )
+                      .toUpperCase()}
+                  </span>
+                )}
               </div>
-            ) : (
+
+              <div
+                style={
+                  styles.identity
+                }
+              >
+                <h1
+                  style={
+                    styles.displayName
+                  }
+                >
+                  {displayName}
+                </h1>
+
+                {profile.username && (
+                  <div
+                    style={
+                      styles.username
+                    }
+                  >
+                    @
+                    {
+                      profile.username
+                    }
+                  </div>
+                )}
+
+                {locationLabel && (
+                  <div
+                    style={
+                      styles.location
+                    }
+                  >
+                    📍{' '}
+                    {
+                      locationLabel
+                    }
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {profile.bio && (
+              <p
+                style={
+                  styles.bio
+                }
+              >
+                {profile.bio}
+              </p>
+            )}
+
+            <div
+              style={
+                styles.stats
+              }
+            >
+              <div
+                style={
+                  styles.stat
+                }
+              >
+                <strong
+                  style={
+                    styles.statNumber
+                  }
+                >
+                  {
+                    discoveriesCount
+                  }
+                </strong>
+
+                <span
+                  style={
+                    styles.statLabel
+                  }
+                >
+                  {discoveriesCount ===
+                  1
+                    ? 'descoberta'
+                    : 'descobertas'}
+                </span>
+              </div>
+
               <button
                 type="button"
                 onClick={() =>
-                  void handleFollowToggle()
-                }
-                disabled={
-                  followLoading
+                  navigate(
+                    `/profile/${profileId}/connections?type=followers`,
+                  )
                 }
                 style={{
-                  ...styles.followButton,
-                  ...(isFollowing
-                    ? styles.followingButton
-                    : {}),
-                  opacity:
-                    followLoading
-                      ? 0.65
-                      : 1,
+                  ...styles.stat,
+                  ...styles.statButton,
                 }}
+                aria-label="Ver seguidores"
               >
-                {followLoading
-                  ? 'Aguarde...'
-                  : isFollowing
-                    ? '✓ Seguindo'
-                    : '＋ Seguir'}
-              </button>
-            )}
-          </div>
+                <strong
+                  style={
+                    styles.statNumber
+                  }
+                >
+                  {
+                    followersCount
+                  }
+                </strong>
 
-          {error && (
-            <p
+                <span
+                  style={
+                    styles.statLabel
+                  }
+                >
+                  {followersCount ===
+                  1
+                    ? 'seguidor'
+                    : 'seguidores'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/profile/${profileId}/connections?type=following`,
+                  )
+                }
+                style={{
+                  ...styles.stat,
+                  ...styles.statButton,
+                }}
+                aria-label="Ver pessoas seguidas"
+              >
+                <strong
+                  style={
+                    styles.statNumber
+                  }
+                >
+                  {
+                    followingCount
+                  }
+                </strong>
+
+                <span
+                  style={
+                    styles.statLabel
+                  }
+                >
+                  seguindo
+                </span>
+              </button>
+            </div>
+
+            <div
               style={
-                styles.errorText
+                styles.actionArea
               }
             >
-              {error}
-            </p>
-          )}
+              {isOwnProfile ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      '/profile/edit',
+                    )
+                  }
+                  style={
+                    styles.editProfileButton
+                  }
+                >
+                  Editar meu perfil
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleFollowToggle()
+                  }
+                  disabled={
+                    followLoading
+                  }
+                  style={{
+                    ...styles.followButton,
+
+                    ...(isFollowing
+                      ? styles.followingButton
+                      : {}),
+
+                    opacity:
+                      followLoading
+                        ? 0.65
+                        : 1,
+                  }}
+                >
+                  {followLoading
+                    ? 'Aguarde...'
+                    : isFollowing
+                      ? '✓ Seguindo'
+                      : '＋ Seguir'}
+                </button>
+              )}
+            </div>
+
+            {error && (
+              <p
+                style={
+                  styles.errorText
+                }
+              >
+                {error}
+              </p>
+            )}
+          </div>
         </section>
 
         <section
@@ -1108,7 +1417,9 @@ function PublicProfile() {
               }
             >
               {profileDiscoveries.map(
-                (discovery) => (
+                (
+                  discovery,
+                ) => (
                   <article
                     key={
                       discovery.id
@@ -1193,7 +1504,8 @@ function PublicProfile() {
 
                       {discovery
                         .interests
-                        .length > 0 && (
+                        .length >
+                        0 && (
                         <div
                           style={
                             styles.interestList
@@ -1229,7 +1541,9 @@ function PublicProfile() {
       </div>
 
       <MainNavigation
-        currentUserId={currentUserId}
+        currentUserId={
+          currentUserId
+        }
       />
     </main>
   )
@@ -1244,7 +1558,10 @@ const styles: Record<
     background:
       'linear-gradient(180deg, #f8f7f1 0%, #f2f1e9 100%)',
     color: '#213128',
-    padding: '24px 16px 56px',
+    padding:
+      '14px 14px 96px',
+    boxSizing:
+      'border-box',
   },
 
   shell: {
@@ -1253,43 +1570,125 @@ const styles: Record<
     margin: '0 auto',
   },
 
+  topBar: {
+    height: 42,
+    display: 'flex',
+    alignItems: 'center',
+  },
+
   backButton: {
     appearance: 'none',
     border: 0,
-    background: 'transparent',
-    padding: '8px 0',
-    marginBottom: 16,
-    color: '#42634e',
-    fontSize: 15,
+    background:
+      'transparent',
+    padding: '8px 4px',
+    color: '#6e7d73',
+    fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  backArrow: {
+    fontSize: 16,
+    lineHeight: 1,
   },
 
   profileCard: {
+    overflow: 'hidden',
     background: '#fffef9',
     border:
-      '1px solid rgba(45, 76, 56, 0.10)',
-    borderRadius: 26,
-    padding: 24,
+      '1px solid rgba(45, 76, 56, 0.09)',
+    borderRadius: 28,
     boxShadow:
-      '0 16px 42px rgba(39, 63, 47, 0.08)',
+      '0 18px 48px rgba(39, 63, 47, 0.08)',
   },
 
-  profileTop: {
+  horizon: {
+    width: '100%',
+    position: 'relative',
+    aspectRatio: '2.85 / 1',
+    minHeight: 165,
+    overflow: 'hidden',
+    background:
+      'linear-gradient(135deg, #dce9dc 0%, #b7d1bb 48%, #789d80 100%)',
+  },
+
+  horizonImage: {
+    width: '100%',
+    height: '100%',
+    display: 'block',
+    objectFit: 'cover',
+  },
+
+  horizonPlaceholder: {
+    width: '100%',
+    height: '100%',
+    minHeight: 165,
     display: 'flex',
     alignItems: 'center',
-    gap: 18,
+    justifyContent:
+      'center',
+    background:
+      'radial-gradient(circle at 50% 100%, rgba(255,255,255,0.58), transparent 38%), linear-gradient(135deg, #dce9dc 0%, #b7d1bb 48%, #789d80 100%)',
+  },
+
+  horizonSymbol: {
+    color:
+      'rgba(255,255,255,0.72)',
+    fontSize: 34,
+  },
+
+  horizonShade: {
+    pointerEvents: 'none',
+    position: 'absolute',
+    inset: 0,
+    background:
+      'linear-gradient(180deg, transparent 55%, rgba(18,45,29,0.22) 100%)',
+  },
+
+  horizonLabel: {
+    position: 'absolute',
+    right: 16,
+    bottom: 12,
+    color:
+      'rgba(255,255,255,0.92)',
+    fontSize: 10,
+    fontWeight: 800,
+    letterSpacing:
+      '0.07em',
+    textShadow:
+      '0 1px 5px rgba(0,0,0,0.24)',
+  },
+
+  profileBody: {
+    padding:
+      '0 20px 22px',
+  },
+
+  identityBlock: {
+    display: 'flex',
+    alignItems:
+      'flex-end',
+    gap: 16,
+    marginTop: -38,
+    position: 'relative',
+    zIndex: 2,
   },
 
   avatar: {
-    width: 92,
-    height: 92,
+    width: 96,
+    height: 96,
     borderRadius: '50%',
     overflow: 'hidden',
     flexShrink: 0,
     background: '#e8eee5',
     border:
-      '3px solid rgba(70, 112, 80, 0.12)',
+      '4px solid #fffef9',
+    boxShadow:
+      '0 8px 20px rgba(28, 55, 36, 0.16)',
   },
 
   avatarImage: {
@@ -1304,7 +1703,8 @@ const styles: Record<
     height: '100%',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent:
+      'center',
     color: '#476952',
     fontSize: 34,
     fontWeight: 800,
@@ -1313,61 +1713,69 @@ const styles: Record<
   identity: {
     minWidth: 0,
     flex: 1,
+    paddingBottom: 6,
   },
 
   displayName: {
     margin: 0,
-    fontSize: 28,
-    lineHeight: 1.1,
-    letterSpacing: '-0.02em',
+    color: '#213128',
+    fontSize:
+      'clamp(1.5rem, 6vw, 1.85rem)',
+    lineHeight: 1.05,
+    letterSpacing:
+      '-0.025em',
   },
 
   username: {
     marginTop: 5,
-    color: '#718078',
-    fontSize: 15,
-  },
-
-  location: {
-    marginTop: 10,
-    color: '#617168',
+    color: '#748078',
     fontSize: 14,
   },
 
+  location: {
+    marginTop: 7,
+    color: '#66736b',
+    fontSize: 13,
+    lineHeight: 1.4,
+  },
+
   bio: {
-    margin: '22px 0 0',
+    margin: '20px 0 0',
     color: '#3f4c45',
-    fontSize: 16,
+    fontSize: 15,
     lineHeight: 1.65,
+    whiteSpace: 'pre-wrap',
   },
 
   stats: {
     display: 'grid',
     gridTemplateColumns:
       'repeat(3, minmax(0, 1fr))',
-    gap: 10,
-    marginTop: 24,
-    padding: '18px 0',
+    gap: 8,
+    marginTop: 22,
+    padding: '16px 0',
     borderTop:
-      '1px solid rgba(35, 58, 43, 0.08)',
+      '1px solid rgba(35, 58, 43, 0.07)',
     borderBottom:
-      '1px solid rgba(35, 58, 43, 0.08)',
+      '1px solid rgba(35, 58, 43, 0.07)',
   },
 
   stat: {
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection:
+      'column',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     textAlign: 'center',
   },
 
   statButton: {
     appearance: 'none',
     border: 0,
-    background: 'transparent',
+    background:
+      'transparent',
     margin: 0,
-    padding: '6px 4px',
+    padding: '4px',
     fontFamily: 'inherit',
     color: 'inherit',
     cursor: 'pointer',
@@ -1375,28 +1783,29 @@ const styles: Record<
   },
 
   statNumber: {
-    fontSize: 21,
+    fontSize: 20,
     lineHeight: 1,
     color: '#24452e',
   },
 
   statLabel: {
-    color: '#758078',
-    fontSize: 12,
+    color: '#7a867f',
+    fontSize: 11,
   },
 
   actionArea: {
-    marginTop: 20,
+    marginTop: 16,
   },
 
   followButton: {
     width: '100%',
     border: 0,
-    borderRadius: 16,
-    padding: '13px 18px',
+    borderRadius: 999,
+    padding: '12px 18px',
     background: '#315e3d',
     color: '#fff',
-    fontSize: 15,
+    fontFamily: 'inherit',
+    fontSize: 14,
     fontWeight: 800,
     cursor: 'pointer',
   },
@@ -1408,16 +1817,18 @@ const styles: Record<
       '1px solid rgba(49, 94, 61, 0.14)',
   },
 
-  ownProfileBadge: {
+  editProfileButton: {
     width: '100%',
-    boxSizing: 'border-box',
-    borderRadius: 16,
-    padding: '13px 18px',
-    background: '#edf1e9',
-    color: '#55705d',
-    fontSize: 14,
-    fontWeight: 700,
-    textAlign: 'center',
+    border:
+      '1px solid rgba(49, 94, 61, 0.13)',
+    borderRadius: 999,
+    padding: '12px 18px',
+    background: '#f2f5ef',
+    color: '#486552',
+    fontFamily: 'inherit',
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: 'pointer',
   },
 
   errorText: {
@@ -1433,7 +1844,8 @@ const styles: Record<
 
   discoverySectionHeader: {
     display: 'flex',
-    alignItems: 'flex-end',
+    alignItems:
+      'flex-end',
     justifyContent:
       'space-between',
     gap: 16,
@@ -1442,16 +1854,18 @@ const styles: Record<
 
   sectionEyebrow: {
     color: '#66806e',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 900,
-    letterSpacing: '0.14em',
+    letterSpacing:
+      '0.14em',
   },
 
   sectionTitle: {
     margin: '5px 0 0',
-    fontSize: 22,
+    fontSize: 21,
     lineHeight: 1.25,
-    letterSpacing: '-0.02em',
+    letterSpacing:
+      '-0.02em',
   },
 
   discoveryGrid: {
@@ -1471,7 +1885,8 @@ const styles: Record<
 
   discoveryImageWrapper: {
     width: '100%',
-    aspectRatio: '16 / 9',
+    aspectRatio:
+      '16 / 9',
     background: '#e8ebe5',
     overflow: 'hidden',
   },
@@ -1485,10 +1900,12 @@ const styles: Record<
 
   discoveryPlaceholder: {
     width: '100%',
-    aspectRatio: '16 / 7',
+    aspectRatio:
+      '16 / 7',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent:
+      'center',
     background:
       'linear-gradient(135deg, #edf2e9 0%, #e4ece3 100%)',
   },
@@ -1499,7 +1916,8 @@ const styles: Record<
   },
 
   discoveryContent: {
-    padding: '18px 20px 20px',
+    padding:
+      '18px 20px 20px',
   },
 
   discoveryDate: {
